@@ -1,13 +1,10 @@
 # dotfiles
 
-Personal dotfiles managed with [chezmoi](https://chezmoi.io), synced across
-Termux (Android) and Linux from a single repo.
+Personal dotfiles managed with [chezmoi](https://chezmoi.io), synced across Termux (Android) and Linux from a single repo.
 
 ## What's tracked
 
-This list is generated automatically by a git pre-commit hook — see
-`scripts/update-readme.sh`. Don't edit the block below by hand; it will be
-overwritten on the next commit.
+This list is generated automatically by a git pre-commit hook — see `scripts/update-readme.sh`. Don't edit the block below by hand; it will be overwritten on the next commit.
 
 <!-- MANAGED_FILES_START -->
 - `~/.gitconfig`
@@ -20,10 +17,7 @@ overwritten on the next commit.
 
 ## Platform separation
 
-One repo, no forks or branches per OS. Platform-specific behavior is handled
-via chezmoi templates (`.tmpl` files) using a `platform` variable, since
-`chezmoi.os` alone can't distinguish Termux from other Linux systems (both
-report `"linux"`).
+One repo, no forks or branches per OS. Platform-specific behavior is handled via chezmoi templates (`.tmpl` files) using a `platform` variable, since `chezmoi.os` alone can't distinguish Termux from other Linux systems (both report `"linux"`).
 
 Each machine needs its own `~/.config/chezmoi/chezmoi.toml`:
 
@@ -32,17 +26,14 @@ Each machine needs its own `~/.config/chezmoi/chezmoi.toml`:
     platform = "termux"   # or "linux"
 ```
 
-Termux-only files (like `.termux/`) are skipped entirely on non-Termux
-machines via `.chezmoiignore`.
+Termux-only files (like `.termux/`) are skipped entirely on non-Termux machines via `.chezmoiignore`.
 
 ## Repo layout
 
-Source files live under the repo root — a `.chezmoiroot` file
-at the repo root points chezmoi there.
+Source files sit at the repo root (no `home/` subdirectory, chezmoi's default source-directory behavior.
 
 ```
 dotfiles/
-├── .chezmoiroot          # contains: home
 ├── .github/workflows/
 ├── scripts/
 │   └── update-readme.sh
@@ -52,8 +43,8 @@ dotfiles/
 ├── dot_gitconfig
 ├── dot_p10k.zsh
 └── private_dot_termux/
-  ├── font.ttf
-  └── termux.properties
+    ├── font.ttf
+    └── termux.properties
 ```
 
 ## Setup on a new machine
@@ -74,8 +65,7 @@ echo -e '[data]\n    platform = "linux"' > ~/.config/chezmoi/chezmoi.toml
 chezmoi init --apply git@github.com:<you>/dotfiles.git
 ```
 
-**After cloning on any machine**, also install the pre-commit hook (it does
-not travel with `git clone` automatically):
+**After cloning on any machine**, also install the pre-commit hook (it does not travel with `git clone` automatically):
 ```bash
 chezmoi cd
 cp scripts/pre-commit .git/hooks/pre-commit
@@ -94,18 +84,13 @@ chezmoi update              # pull latest from GitHub + apply
 Commit and push from the source dir:
 ```bash
 chezmoi cd
-git add -A && git commit -m "message" && git push
+git add -A && git commit -m "<message>" && git push
 ```
 
 ## Explicitly NOT tracked
 
-`.ssh/`, `.suroot`, `.bash_history`, `.zsh_history`, and framework-managed
-dirs (`.oh-my-zsh`, `.cache`, `.npm`, `.local`, `.android`) — secrets,
-history, and generated files don't belong in a synced config repo.
+`.ssh/`, `.suroot`, `.bash_history`, `.zsh_history`, and framework-managed directories (`.oh-my-zsh`, `.cache`, `.npm`, `.local`, `.android`) — secrets, history, and generated files don't belong in a synced config repo.
 
 ## Relationship to Termux backup system
 
-This repo handles portable, hand-authored config. The separate Termux
-backup system (Cyber-Quasar) handles device state, caches, and anything
-not meant to be identical across machines. The two are not meant to
-track the same files.
+This repo handles portable, hand-authored config. The separate Termux backup system (termux-backup) handles device state, caches, and anything not meant to be identical across machines. The two are not meant to track the same files. 
