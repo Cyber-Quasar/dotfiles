@@ -37,9 +37,8 @@ machines via `.chezmoiignore`.
 
 ## Repo layout
 
-Source files live under `home/`, not the repo root — a `.chezmoiroot` file
-at the repo root points chezmoi there. This keeps the repo root readable
-(README, workflows, scripts) separate from the actual managed dotfiles.
+Source files live under the repo root — a `.chezmoiroot` file
+at the repo root points chezmoi there.
 
 ```
 dotfiles/
@@ -48,14 +47,13 @@ dotfiles/
 ├── scripts/
 │   └── update-readme.sh
 ├── README.md
-└── home/
-    ├── .chezmoiignore
-    ├── dot_zshrc.tmpl
-    ├── dot_gitconfig
-    ├── dot_p10k.zsh
-    └── private_dot_termux/
-        ├── font.ttf
-        └── termux.properties
+├── .chezmoiignore
+├── dot_zshrc.tmpl
+├── dot_gitconfig
+├── dot_p10k.zsh
+└── private_dot_termux/
+  ├── font.ttf
+  └── termux.properties
 ```
 
 ## Setup on a new machine
