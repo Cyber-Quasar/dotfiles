@@ -1,0 +1,5 @@
+# .chezmoiignore
+{{- if ne .platform "termux" }}
+dot_termux
+{{- end }}
+

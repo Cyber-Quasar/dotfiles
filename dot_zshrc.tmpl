@@ -1,0 +1,844 @@
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# Path to your Oh My Zsh installation.
+export ZSH="$HOME/.oh-my-zsh"
+
+ZSH_THEME="powerlevel10k/powerlevel10k"
+
+plugins=(git zsh-syntax-highlighting zsh-autosuggestions zsh-completions sudo history)
+
+source $ZSH/oh-my-zsh.sh
+
+# ─────────────────────────────────────────────
+# Zsh aliases
+# ─────────────────────────────────────────────
+alias zshconfig="nvim ~/.zshrc"
+alias ohmyzsh="nvim ~/.oh-my-zsh"
+alias sourcesh='source ~/.zshrc'
+alias clearhist='echo >! $HISTFILE && fc -R'
+
+# Useful aliases
+alias ls='eza -lah --icons --group-directories-first'
+alias la='eza -AF --icons --group-directories-first'
+alias l='eza -F --icons --group-directories-first'
+alias ltree='eza -TAF -L=3 --icons --group-directories-first'
+alias grep='grep --color=auto'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias rmi='rm -I'
+alias cpi='cp -I'
+alias mvi='mv -I'
+alias mkdir='mkdir -p'
+alias ping='ping -c 5'
+
+# Termux specific
+alias storage='cd /sdcard'
+alias update='pkg update && pkg upgrade -y && pip install --upgrade pip 2>/dev/null && npm update -g 2>/dev/null'
+alias delete='apt purge'
+
+# ─────────────────────────────────────────────
+# SSH agent — loads the key once per shell session so SSH-signed commits
+# (gpg.format=ssh) and git push/pull don't re-prompt for the passphrase on
+# every operation. 14 commits behind upstream once meant 14 separate
+# prompts during a rebase, and a single mistyped one corrupted it mid-run.
+#
+# A restore flow (termux-restore) can run before the key even exists on
+# disk yet (fresh install, key restored partway through), so the auto-run
+# below at shell start may silently find nothing to add. _ensure_ssh_agent
+# is called again explicitly at the start of termux-restore once the key
+# is actually expected to be in place. local-restore doesn't call this —
+# it's deliberately git/SSH-free (SD-card-only, fully offline).
+# ─────────────────────────────────────────────
+_ensure_ssh_agent() {
+    if [[ -z "$SSH_AUTH_SOCK" ]]; then
+        eval "$(ssh-agent -s)" > /dev/null
+    fi
+    ssh-add -l &>/dev/null || ssh-add ~/.ssh/id_ed25519 2>/dev/null
+}
+_ensure_ssh_agent
+
+# ─────────────────────────────────────────────
+# SD_ROOT detection — computed once per shell session,
+# cached in-memory. Replaces three duplicated su-c/tmp-file
+# blocks previously inlined in _tb_get_repo, _ssh-sd-path,
+# and nikgapps.
+#
+# NOTE: su -c output is routed through $TMPDIR/sd_root.txt
+# rather than direct $(su -c ...) substitution. Direct command
+# substitution on su -c does not reliably return a value inside
+# zsh functions on this setup — this is not stylistic, it's a
+# workaround for that limitation.
+# ─────────────────────────────────────────────
+_get_sd_root() {
+    if [[ -z "$SD_ROOT" ]]; then
+        su -c "ls /storage/" 2>/dev/null | grep -v "emulated" | grep -v "self" | head -n 1 > $TMPDIR/sd_root.txt
+        export SD_ROOT=$(cat $TMPDIR/sd_root.txt)
+        rm -f $TMPDIR/sd_root.txt
+        if [[ -z "$SD_ROOT" ]]; then
+            echo "\e[31m  [FAIL] No SD card detected.\e[0m" >&2
+            return 1
+        fi
+    fi
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: verify-dev
+# Enables SSH commit signing globally for all repos on this device.
+# Run once. Requires the key to also be added as a Signing Key on GitHub.
+# ─────────────────────────────────────────────
+verify-dev() {
+    git config --global gpg.format ssh
+    git config --global user.signingkey ~/.ssh/id_ed25519.pub
+    git config --global commit.gpgsign true
+    echo "\e[32m✔ SSH commit signing enabled globally.\e[0m"
+    echo "\e[33m  Don't forget to add ~/.ssh/id_ed25519.pub as a Signing Key on GitHub.\e[0m"
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: gitlab-mirror
+# Generates and pushes a GitHub Action workflow file
+# that mirrors the repo to GitLab on every push.
+# ─────────────────────────────────────────────
+gitlab-mirror() {
+    local repo_dir="$1"
+    local gitlab_user="$2"
+
+    if [[ -z "$repo_dir" || -z "$gitlab_user" ]]; then
+        echo "Usage: gitlab-mirror <repo_dir> <gitlab_username>"
+        return 1
+    fi
+
+    cd "$repo_dir" || return 1
+    mkdir .github/workflows
+
+    cat > .github/workflows/mirror-to-gitlab.yml <<EOF
+name: Mirror to GitLab
+on:
+  push:
+    branches: [main]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to GitLab
+        env:
+          SSH_PRIVATE_KEY: \${{"{{"}} secrets.GITLAB_SSH_KEY {{"}}"}}
+        run: |
+          mkdir -p ~/.ssh
+          echo "\$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          eval "\$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+          git remote add gitlab git@gitlab.com:$gitlab_user/\${{"{{"}} github.event.repository.name {{"}}"}}.git
+          git push gitlab main --force
+EOF
+
+    git add .github/workflows/mirror-to-gitlab.yml
+    git commit -m "ci: mirror to gitlab"
+    git push origin main --force-with-lease
+
+    echo "\e[32m✔ Workflow file pushed.\e[0m"
+    echo "\e[33m  Still required manually:\e[0m"
+    echo "  1. Create matching repo on GitLab"
+    echo "  2. ssh-keygen -t ed25519 -f ~/.ssh/gitlab_deploy -N \"\" -C cyberquasar@android"
+    echo "  3. Add ~/.ssh/gitlab_deploy.pub as a GitLab Deploy Key (write access)"
+    echo "  4. Add ~/.ssh/gitlab_deploy contents as GitHub secret GITLAB_SSH_KEY"
+}
+
+# ─────────────────────────────────────────────
+# GITHUB BACKUP SYSTEM
+# Repo: <https://github.com/Cyber-Quasar/termux-backup>
+# Backup path: SD card → JUJUUU/Phone Stuff/App Backups/Termux/
+# ─────────────────────────────────────────────
+
+# --- Configuration ---
+TBACKUP_REMOTE="git@github.com:Cyber-Quasar/termux-backup.git"
+TBACKUP_CONFIGS=(
+    "$HOME/.zshrc"
+    "$HOME/.p10k.zsh"
+    "$HOME/.ssh/config"
+    "$HOME/.gitconfig"
+)
+
+# Helper: detect SD card and return TBACKUP_REPO path
+_tb_get_repo() {
+    _get_sd_root || return 1
+    echo "/storage/$SD_ROOT/JUJUUU/Phone Stuff/App Backups/Termux"
+}
+
+# Helper: set git identity and safe directory
+_tb_ensure_git_env() {
+    local REPO="$1"
+    git config --global --add safe.directory "$REPO"
+    git config --global user.email "mm.juan.xj@gmail.com"
+    git config --global user.name "CyberQuasar"
+}
+
+# Helper: untrack any file in .gitignore that's still cached in git index
+_tb_clean_tracked() {
+    local REPO="$1"
+    cd "$REPO"
+    git ls-files | while read f; do
+        if git check-ignore -q "$f" 2>/dev/null; then
+            git rm --cached "$f" 2>/dev/null
+            echo "\e[33m  [UNTRACKED] $f\e[0m"
+        fi
+    done
+    cd "$HOME"
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: tb-init
+# Fully automated setup: clones, or installs + creates remote via GitHub CLI
+# ─────────────────────────────────────────────
+tb-init() {
+    echo "\e[36m==> Checking termux-backup repository status...\e[0m"
+
+    local TBACKUP_REPO
+    TBACKUP_REPO="$(_tb_get_repo)" || return 1
+    _tb_ensure_git_env "$TBACKUP_REPO"
+
+    if [[ ! -d "$TBACKUP_REPO" ]]; then
+        mkdir "$TBACKUP_REPO"
+    fi
+
+    # 1. Ensure gh CLI is installed
+    if ! command -v gh &> /dev/null; then
+        echo "\e[36m  --> Installing GitHub CLI (gh)...\e[0m"
+        pkg install -y gh || { echo "\e[31m  [FAIL] Failed to install gh CLI.\e[0m"; return 1; }
+    fi
+
+    # 2. Authenticate if needed
+    if ! gh auth status &> /dev/null; then
+        echo "\e[31m  [REQUIRED] GitHub CLI is not authenticated.\e[0m"
+        echo "\e[33m  Opening interactive authentication prompt now...\e[0m"
+        echo "\e[36m  (Select 'GitHub.com', choose 'SSH', and follow the browser verification steps)\e[0m\n"
+        gh auth login || { echo "\e[31m  [FAIL] Authentication cancelled or failed.\e[0m"; return 1; }
+    fi
+
+    # 3. Handle local repo state
+    if [[ ! -d "$TBACKUP_REPO/.git" ]]; then
+        echo "\e[33m  [INFO] Local repo missing. Inspecting GitHub remote status...\e[0m"
+
+        if gh repo view "Cyber-Quasar/termux-backup" &>/dev/null; then
+            echo "\e[32m  [OK] Repository detected on GitHub. Cloning over SSH...\e[0m"
+            git clone "$TBACKUP_REMOTE" "$TBACKUP_REPO"
+        else
+            echo "\e[33m  [WARN] Repo not found on GitHub. Force-creating now...\e[0m"
+            if gh repo create "termux-backup" --private; then
+                echo "\e[32m  [OK] Remote repository created successfully!\e[0m"
+                cd "$TBACKUP_REPO"
+                git init -b main
+                git remote add origin "$TBACKUP_REMOTE"
+                touch README.md
+                git add README.md
+                git commit -m "initial commit"
+                git push -u origin main
+                cd "$HOME"
+            else
+                echo "\e[31m  [FAIL] Failed to create repository via GitHub CLI.\e[0m"
+                return 1
+            fi
+        fi
+    else
+        echo "\e[32m  [OK] Repo already initialized at $TBACKUP_REPO\e[0m"
+        git -C "$TBACKUP_REPO" remote set-url origin "$TBACKUP_REMOTE"
+    fi
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: termux-backup
+# Full backup: configs + pkg list + two tar archives
+# termux-home.tar.gz      → slim, pushed to GitHub
+# termux-home-full.tar.gz → full, stays on SD card only
+# ─────────────────────────────────────────────
+termux-backup() {
+    echo "\e[36m==> Starting Termux Backup...\e[0m"
+    local TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    local FAIL=0
+
+    local TBACKUP_REPO
+    TBACKUP_REPO="$(_tb_get_repo)" || return 1
+    local TBACKUP_PKG_LIST="$TBACKUP_REPO/pkg-list.txt"
+    local TBACKUP_ARCHIVE="$TBACKUP_REPO/termux-home.tar.gz"
+    local TBACKUP_CHECKSUM="$TBACKUP_REPO/termux-home.tar.gz.sha256"
+    local TBACKUP_LOCAL_ARCHIVE="$TBACKUP_REPO/termux-home-full.tar.gz"
+    local TBACKUP_LOCAL_CHECKSUM="$TBACKUP_REPO/termux-home-full.tar.gz.sha256"
+
+    _tb_ensure_git_env "$TBACKUP_REPO"
+
+    # Ensure repo exists
+    if [[ ! -d "$TBACKUP_REPO/.git" ]]; then
+        echo "\e[33m  [WARN] Backup repo not found. Running tb-init first.\e[0m"
+        tb-init || { echo "\e[31m  [FAIL] Init failed. Aborting.\e[0m"; return 1; }
+    fi
+
+    # 1. Copy tracked config files
+    echo "\e[36m  --> Copying config files...\e[0m"
+    mkdir "$TBACKUP_REPO/configs" 2>/dev/null
+    for f in "${TBACKUP_CONFIGS[@]}"; do
+        if [[ -f "$f" ]]; then
+            cp "$f" "$TBACKUP_REPO/configs/$(basename $f)" && \
+                echo "\e[32m    [OK] $f\e[0m" || \
+                { echo "\e[31m    [FAIL] $f\e[0m"; FAIL=1; }
+        else
+            echo "\e[33m    [SKIP] Not found: $f\e[0m"
+        fi
+    done
+
+    # 2. Export package list
+    echo "\e[36m  --> Exporting package list...\e[0m"
+    pkg list-installed 2>/dev/null | grep -v '^Listing' | awk -F'/' '{print $1}' > "$TBACKUP_PKG_LIST" && \
+        echo "\e[32m    [OK] pkg-list.txt ($(wc -l < $TBACKUP_PKG_LIST) packages)\e[0m" || \
+        { echo "\e[31m    [FAIL] Could not export pkg list\e[0m"; FAIL=1; }
+
+    # 3. GITHUB archive — slim, stays under 100MB
+    echo "\e[36m  --> Creating GitHub archive (slim)...\e[0m"
+    tar -zcf "$TBACKUP_ARCHIVE" \
+        --exclude="$(basename $TBACKUP_REPO)" \
+        --exclude=".cache" \
+        --exclude=".oh-my-zsh" \
+        --exclude=".local" \
+        --exclude=".npm" \
+        --exclude=".zsh_history" \
+        --exclude=".ssh/agent" \
+        --exclude=".suroot" \
+        -C "$HOME" . && \
+        echo "\e[32m    [OK] $(du -sh $TBACKUP_ARCHIVE | cut -f1)\e[0m" || \
+        { echo "\e[31m    [FAIL] GitHub tar failed\e[0m"; FAIL=1; }
+
+    # 4. SHA256 for GitHub archive
+    sha256sum "$TBACKUP_ARCHIVE" > "$TBACKUP_CHECKSUM" && \
+        echo "\e[32m    [OK] checksum: $(cut -d' ' -f1 $TBACKUP_CHECKSUM)\e[0m" || \
+        { echo "\e[31m    [FAIL] sha256sum failed\e[0m"; FAIL=1; }
+
+    # 5. LOCAL archive — full, only skip .cache
+    echo "\e[36m  --> Creating full archive...\e[0m"
+    tar -zcf "$TBACKUP_LOCAL_ARCHIVE" \
+        --exclude="$(basename $TBACKUP_REPO)" \
+        --exclude=".cache" \
+        --exclude=".zsh_history" \
+        --exclude=".ssh/agent" \
+        --exclude=".suroot" \
+        -C "$HOME" . && \
+        echo "\e[32m    [OK] $(du -sh $TBACKUP_LOCAL_ARCHIVE | cut -f1)\e[0m" || \
+        { echo "\e[31m    [FAIL] Full tar failed\e[0m"; FAIL=1; }
+
+    # 6. SHA256 for full archive
+    sha256sum "$TBACKUP_LOCAL_ARCHIVE" > "$TBACKUP_LOCAL_CHECKSUM" && \
+        echo "\e[32m    [OK] checksum: $(cut -d' ' -f1 $TBACKUP_LOCAL_CHECKSUM)\e[0m" || \
+        { echo "\e[31m    [FAIL] Full sha256sum failed\e[0m"; FAIL=1; }
+
+    # 7. Write metadata
+    cat > "$TBACKUP_REPO/backup-meta.txt" <<EOF
+Backup Timestamp  : $TIMESTAMP
+Hostname          : $(uname -n)
+Arch              : $(uname -m)
+Termux Packages   : $(wc -l < $TBACKUP_PKG_LIST)
+GitHub Archive    : $(du -sh $TBACKUP_ARCHIVE | cut -f1)
+Full Archive      : $(du -sh $TBACKUP_LOCAL_ARCHIVE | cut -f1)
+SHA256 (GitHub)   : $(cut -d' ' -f1 $TBACKUP_CHECKSUM)
+SHA256 (Full)     : $(cut -d' ' -f1 $TBACKUP_LOCAL_CHECKSUM)
+EOF
+
+    # 8. Git commit and push
+    echo "\e[36m  --> Committing to GitHub...\e[0m"
+    cd "$TBACKUP_REPO"
+
+    # Ensure full archive is in .gitignore
+    grep -qxF "termux-home-full.tar.gz" .gitignore 2>/dev/null || \
+        echo "termux-home-full.tar.gz" >> .gitignore
+    grep -qxF "termux-home-full.tar.gz.sha256" .gitignore 2>/dev/null || \
+        echo "termux-home-full.tar.gz.sha256" >> .gitignore
+
+    # Untrack any file that matches .gitignore
+    _tb_clean_tracked "$TBACKUP_REPO"
+    cd "$TBACKUP_REPO"
+
+    # Stage only what belongs on GitHub
+    git add .gitignore
+    git add configs/
+    git add pkg-list.txt
+    git add termux-home.tar.gz
+    git add termux-home.tar.gz.sha256
+    git add backup-meta.txt
+
+    if [[ -z "$(git status --porcelain)" ]]; then
+        echo "\e[33m  [INFO] Nothing changed since last backup.\e[0m"
+    else
+        git commit -m "backup: $TIMESTAMP" && \
+        git pull origin main --no-rebase 2>/dev/null && \
+        git push origin HEAD --force-with-lease && \
+            echo "\e[32m  [OK] Pushed to GitHub\e[0m" || \
+            { echo "\e[31m  [FAIL] git push failed (check SSH key / internet)\e[0m"; FAIL=1; }
+    fi
+    cd "$HOME"
+
+    # Summary
+    if [[ $FAIL -eq 0 ]]; then
+        echo "\e[32m\n✔ Backup complete: $TIMESTAMP\e[0m"
+        echo "\e[32m  GitHub → $TBACKUP_ARCHIVE (slim)\e[0m"
+        echo "\e[32m  SD     → $TBACKUP_LOCAL_ARCHIVE (full)\e[0m"
+    else
+        echo "\e[31m\n✘ Backup finished with errors. Review above.\e[0m"
+        return 1
+    fi
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: tb-verify
+# Validates both archives if present, non-breaking for full archive failures
+# ─────────────────────────────────────────────
+tb-verify() {
+    echo "\e[36m==> Verifying backup integrity...\e[0m"
+
+    local TBACKUP_REPO
+    TBACKUP_REPO="$(_tb_get_repo)" || return 1
+    local TBACKUP_ARCHIVE="$TBACKUP_REPO/termux-home.tar.gz"
+    local TBACKUP_CHECKSUM="$TBACKUP_REPO/termux-home.tar.gz.sha256"
+    local TBACKUP_LOCAL_ARCHIVE="$TBACKUP_REPO/termux-home-full.tar.gz"
+    local TBACKUP_LOCAL_CHECKSUM="$TBACKUP_REPO/termux-home-full.tar.gz.sha256"
+
+    # GitHub archive
+    if [[ -f "$TBACKUP_CHECKSUM" && -f "$TBACKUP_ARCHIVE" ]]; then
+        local STORED=$(cut -d' ' -f1 "$TBACKUP_CHECKSUM")
+        local ACTUAL=$(sha256sum "$TBACKUP_ARCHIVE" | cut -d' ' -f1)
+        echo "  [GitHub] Stored : $STORED"
+        echo "  [GitHub] Actual : $ACTUAL"
+        [[ "$STORED" == "$ACTUAL" ]] && \
+            echo "\e[32m  [OK] GitHub integrity PASSED ✔\e[0m" || \
+            { echo "\e[31m  [FAIL] GitHub integrity FAILED ✘\e[0m"; return 1; }
+    else
+        echo "\e[33m  [SKIP] GitHub archive or checksum not found\e[0m"
+    fi
+
+    # Full archive
+    if [[ -f "$TBACKUP_LOCAL_CHECKSUM" && -f "$TBACKUP_LOCAL_ARCHIVE" ]]; then
+        local STORED_L=$(cut -d' ' -f1 "$TBACKUP_LOCAL_CHECKSUM")
+        local ACTUAL_L=$(sha256sum "$TBACKUP_LOCAL_ARCHIVE" | cut -d' ' -f1)
+        echo "  [Full]   Stored : $STORED_L"
+        echo "  [Full]   Actual : $ACTUAL_L"
+        [[ "$STORED_L" == "$ACTUAL_L" ]] && \
+            echo "\e[32m  [OK] Full integrity PASSED ✔\e[0m" || \
+            echo "\e[31m  [FAIL] Full integrity FAILED ✘\e[0m"
+    else
+        echo "\e[33m  [SKIP] Full archive or checksum not found\e[0m"
+    fi
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: termux-restore
+# Disaster recovery in one command.
+# ─────────────────────────────────────────────
+termux-restore() {
+    local FAIL=0
+    local REPORT=()
+
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║   TERMUX DISASTER RECOVERY MODE      ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
+
+    local TBACKUP_REPO
+    TBACKUP_REPO="$(_tb_get_repo)" || return 1
+    local TBACKUP_PKG_LIST="$TBACKUP_REPO/pkg-list.txt"
+    local TBACKUP_ARCHIVE="$TBACKUP_REPO/termux-home.tar.gz"
+    local TBACKUP_LOCAL_ARCHIVE="$TBACKUP_REPO/termux-home-full.tar.gz"
+
+    _tb_ensure_git_env "$TBACKUP_REPO"
+
+    # Key may not have been present when .zshrc was first sourced during a
+    # fresh-install bootstrap — make sure it's actually loaded now.
+    _ensure_ssh_agent
+
+    # 0. Prereqs
+    echo "\e[36m[0/6] Installing prerequisites...\e[0m"
+    pkg install -y git openssh rsync 2>/dev/null && \
+        { echo "\e[32m  [OK] git + openssh + rsync ready\e[0m"; REPORT+=("prereqs: OK"); } || \
+        { echo "\e[31m  [FAIL] Could not install prereqs\e[0m"; REPORT+=("prereqs: FAIL"); FAIL=1; }
+
+    # 1. Pull from GitHub
+    echo "\e[36m[1/6] Pulling backup repo from GitHub...\e[0m"
+    if [[ -d "$TBACKUP_REPO/.git" ]]; then
+        git -C "$TBACKUP_REPO" remote set-url origin "$TBACKUP_REMOTE"
+        git -C "$TBACKUP_REPO" pull origin HEAD 2>/dev/null && \
+            { echo "\e[32m  [OK] Pulled latest\e[0m"; REPORT+=("git pull: OK"); } || \
+            { echo "\e[31m  [FAIL] git pull failed\e[0m"; REPORT+=("git pull: FAIL"); FAIL=1; }
+    else
+        git clone "$TBACKUP_REMOTE" "$TBACKUP_REPO" 2>/dev/null && \
+            { echo "\e[32m  [OK] Cloned repo\e[0m"; REPORT+=("git clone: OK"); } || \
+            { echo "\e[31m  [FAIL] git clone failed - check SSH key / internet\e[0m"; REPORT+=("git clone: FAIL"); FAIL=1; return 1; }
+    fi
+
+    # 2. Integrity check
+    echo "\e[36m[2/6] Verifying archive integrity (SHA256)...\e[0m"
+    if tb-verify; then
+        REPORT+=("integrity: PASS")
+    else
+        echo "\e[31m  [ABORT] Archive integrity check failed. Not restoring corrupted data.\e[0m"
+        REPORT+=("integrity: FAIL")
+        _tb-print-report "${REPORT[@]}"
+        return 1
+    fi
+
+    # 3. Restore config files
+    echo "\e[36m[3/6] Restoring config files...\e[0m"
+    if [[ -d "$TBACKUP_REPO/configs" ]]; then
+        for f in "$TBACKUP_REPO/configs"/*(N); do
+            local dest="$HOME/$(basename $f)"
+            cp "$f" "$dest" && \
+                echo "\e[32m  [OK] Restored $(basename $f)\e[0m" || \
+                echo "\e[33m  [WARN] Could not restore $(basename $f)\e[0m"
+        done
+        REPORT+=("configs: OK")
+    else
+        echo "\e[33m  [SKIP] No configs directory found\e[0m"
+        REPORT+=("configs: SKIP")
+    fi
+
+    # 4. Reinstall packages
+    echo "\e[36m[4/6] Reinstalling packages...\e[0m"
+    if [[ -f "$TBACKUP_PKG_LIST" ]]; then
+        local PKG_COUNT=$(wc -l < "$TBACKUP_PKG_LIST")
+        echo "  Installing $PKG_COUNT packages..."
+        xargs pkg install -y < "$TBACKUP_PKG_LIST" 2>>"$HOME/.termux-restore.log" && \
+            { echo "\e[32m  [OK] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
+            { echo "\e[33m  [WARN] Some packages may have failed - see ~/.termux-restore.log\e[0m"; REPORT+=("packages: PARTIAL"); }
+    else
+        echo "\e[33m  [SKIP] pkg-list.txt not found\e[0m"
+        REPORT+=("packages: SKIP")
+    fi
+
+    # 5a. Extract slim GitHub archive
+    echo "\e[36m[5/6] Extracting home archive...\e[0m"
+    if [[ -f "$TBACKUP_ARCHIVE" ]]; then
+        tar -zxf "$TBACKUP_ARCHIVE" -C "$HOME" --keep-newer-files 2>/dev/null
+        echo "\e[32m  [OK] Slim archive extracted\e[0m"
+        REPORT+=("slim archive: OK")
+    else
+        echo "\e[33m  [SKIP] No slim archive found\e[0m"
+        REPORT+=("slim archive: SKIP")
+    fi
+
+    # 5b. Extract full archive on top
+    echo "\e[36m  --> Looking for full archive...\e[0m"
+    if [[ -f "$TBACKUP_LOCAL_ARCHIVE" ]]; then
+        tar -zxf "$TBACKUP_LOCAL_ARCHIVE" -C "$HOME" --keep-newer-files 2>/dev/null
+        echo "\e[32m  [OK] Full archive extracted\e[0m"
+        REPORT+=("full archive: OK")
+    else
+        echo "\e[33m  [SKIP] Full archive not found\e[0m"
+        REPORT+=("full archive: SKIP")
+    fi
+
+    # 6. Final report
+    echo "\e[36m[6/6] Recovery Report\e[0m"
+    _tb-print-report "${REPORT[@]}"
+
+    if [[ $FAIL -eq 0 ]]; then
+        echo "\e[32m\n✔ Disaster recovery complete. Restart Termux to apply.\e[0m"
+    else
+        echo "\e[31m\n✘ Recovery finished with errors. Review above.\e[0m"
+        return 1
+    fi
+}
+
+_tb-print-report() {
+    echo ""
+    echo "\e[36m┌─────────────────────────────┐\e[0m"
+    echo "\e[36m│       RECOVERY REPORT       │\e[0m"
+    echo "\e[36m├─────────────────────────────┤\e[0m"
+    for item in "$@"; do
+        local label="${item%%:*}"
+        local state="${item#*: }"
+        if [[ "$state" == *"OK"* || "$state" == *"PASS"* ]]; then
+            printf "\e[36m│\e[0m %-14s \e[32m%-12s\e[0m \e[36m│\e[0m\n" "$label" "$state"
+        elif [[ "$state" == *"FAIL"* ]]; then
+            printf "\e[36m│\e[0m %-14s \e[31m%-12s\e[0m \e[36m│\e[0m\n" "$label" "$state"
+        else
+            printf "\e[36m│\e[0m %-14s \e[33m%-12s\e[0m \e[36m│\e[0m\n" "$label" "$state"
+        fi
+    done
+    echo "\e[36m└─────────────────────────────┘\e[0m"
+}
+
+alias tb-help='echo "tb-init | termux-backup | tb-verify | termux-restore | local-restore"'
+
+# ─────────────────────────────────────────────
+# FUNCTION: local-restore
+# Offline restore from full archive on SD card.
+# No internet or SSH key required.
+# ─────────────────────────────────────────────
+local-restore() {
+    local FAIL=0
+    local REPORT=()
+
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║      LOCAL RESTORE MODE              ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
+
+    local TBACKUP_REPO
+    TBACKUP_REPO="$(_tb_get_repo)" || return 1
+    local ARCHIVE="$TBACKUP_REPO/termux-home-full.tar.gz"
+    local CHECKSUM="$TBACKUP_REPO/termux-home-full.tar.gz.sha256"
+    local PKG_LIST="$TBACKUP_REPO/pkg-list.txt"
+
+    # 0. Prereqs
+    echo "\e[36m[0/4] Installing prerequisites...\e[0m"
+    pkg install -y rsync 2>/dev/null && \
+        { echo "\e[32m  [OK] rsync ready\e[0m"; REPORT+=("prereqs: OK"); } || \
+        { echo "\e[31m  [FAIL] Could not install prereqs\e[0m"; REPORT+=("prereqs: FAIL"); FAIL=1; }
+
+    # 1. Find full archive
+    echo "\e[36m[1/4] Looking for full archive...\e[0m"
+    if [[ -f "$ARCHIVE" ]]; then
+        echo "\e[32m  [OK] Full archive found on SD card\e[0m"
+        REPORT+=("archive: OK")
+    else
+        echo "\e[31m  [FAIL] No full archive found at $ARCHIVE\e[0m"
+        REPORT+=("archive: FAIL")
+        _tb-print-report "${REPORT[@]}"
+        return 1
+    fi
+
+    # 2. Verify checksum
+    echo "\e[36m[2/4] Verifying archive integrity...\e[0m"
+    if [[ -f "$CHECKSUM" ]]; then
+        local STORED=$(cut -d' ' -f1 "$CHECKSUM")
+        local ACTUAL=$(sha256sum "$ARCHIVE" | cut -d' ' -f1)
+        echo "  Stored : $STORED"
+        echo "  Actual : $ACTUAL"
+        if [[ "$STORED" == "$ACTUAL" ]]; then
+            echo "\e[32m  [OK] Integrity check PASSED ✔\e[0m"
+            REPORT+=("integrity: PASS")
+        else
+            echo "\e[31m  [FAIL] Integrity check FAILED - archive may be corrupted\e[0m"
+            REPORT+=("integrity: FAIL")
+            _tb-print-report "${REPORT[@]}"
+            return 1
+        fi
+    else
+        echo "\e[33m  [SKIP] No checksum file found - skipping verification\e[0m"
+        REPORT+=("integrity: SKIP")
+    fi
+
+    # 3. Reinstall packages
+    echo "\e[36m[3/4] Reinstalling packages...\e[0m"
+    if [[ -f "$PKG_LIST" ]]; then
+        local PKG_COUNT=$(wc -l < "$PKG_LIST")
+        echo "  Installing $PKG_COUNT packages..."
+        xargs pkg install -y < "$PKG_LIST" 2>>"$HOME/.termux-restore.log" && \
+            { echo "\e[32m  [OK] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
+            { echo "\e[33m  [WARN] Some packages may have failed - see ~/.termux-restore.log\e[0m"; REPORT+=("packages: PARTIAL"); }
+    else
+        echo "\e[33m  [SKIP] No pkg-list.txt found\e[0m"
+        REPORT+=("packages: SKIP")
+    fi
+
+    # 4. Extract full archive — true dump, no --keep-newer-files
+    echo "\e[36m[4/4] Extracting full archive...\e[0m"
+    tar -zxf "$ARCHIVE" -C "$HOME" 2>/dev/null
+    echo "\e[32m  [OK] Archive extracted\e[0m"
+    REPORT+=("extract: OK")
+
+    _tb-print-report "${REPORT[@]}"
+    echo "\e[32m\n✔ Local restore complete. Restart Termux to apply.\e[0m"
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: ssh-backup / ssh-restore
+# ─────────────────────────────────────────────
+_ssh-sd-path() {
+    _get_sd_root || return 1
+    echo "/storage/$SD_ROOT/JUJUUU/SSH & Git Stuff/Android SSH"
+}
+
+_ssh-backup-run() {
+    local FLAG="$1"
+    local SOURCE="$HOME/.ssh/"
+    local DEST="$(_ssh-sd-path)" || return 1
+
+    echo "\e[36m==> SSH Backup [$FLAG]\e[0m"
+    echo "\e[36m==> Source : $SOURCE\e[0m"
+    echo "\e[36m==> Dest   : $DEST\e[0m"
+    echo ""
+
+    su -c "mkdir -p \"$DEST\" && /data/data/com.termux/files/usr/bin/rsync -aHv $FLAG --exclude='agent/' \"$SOURCE\" \"$DEST/\""
+
+    if [[ $? -eq 0 ]]; then
+        echo "\e[32m\n✔ SSH backup complete → $DEST\e[0m"
+    else
+        echo "\e[31m\n✘ SSH backup finished with errors.\e[0m"
+        return 1
+    fi
+}
+
+_ssh-restore-run() {
+    local FLAG="$1"
+    local DEST="$HOME/.ssh/"
+    local SOURCE="$(_ssh-sd-path)/" || return 1
+
+    echo "\e[36m==> SSH Restore [$FLAG]\e[0m"
+    echo "\e[36m==> Source : $SOURCE\e[0m"
+    echo "\e[36m==> Dest   : $DEST\e[0m"
+    echo ""
+
+    su -c "mkdir -p \"$DEST\" && /data/data/com.termux/files/usr/bin/rsync -aHv $FLAG --exclude='agent/' \"$SOURCE\" \"$DEST\""
+
+    if [[ $? -eq 0 ]]; then
+        # The rsync above ran as root via su, so everything it wrote to
+        # $DEST is currently owned by root. Reclaim it back to the
+        # normal user via su (only su can chown files away from root),
+        # or chmod below will fail with "Operation not permitted" and
+        # ssh will keep rejecting the key as it did before.
+        su -c "chown -R $(id -u):$(id -g) \"$DEST\""
+        chmod 700 "$DEST"
+        chmod 600 "$DEST"* 2>/dev/null
+        chmod 644 "$DEST"*.pub 2>/dev/null
+        echo "\e[32m\n✔ SSH restore complete. Ownership and permissions fixed.\e[0m"
+    else
+        echo "\e[31m\n✘ SSH restore finished with errors.\e[0m"
+        return 1
+    fi
+}
+
+ssh-backup-delete()  { _ssh-backup-run  "--delete"; }
+ssh-restore-delete() { _ssh-restore-run "--delete"; }
+ssh-backup-ignore()  { _ssh-backup-run  "--ignore-existing"; }
+ssh-restore-ignore() { _ssh-restore-run "--ignore-existing"; }
+
+# ─────────────────────────────────────────────
+# NikGapps Config Submission
+# ─────────────────────────────────────────────
+
+nikgapps() {
+  _get_sd_root || return 1
+  local config_dir="${1:-/storage/$SD_ROOT/JUJUUU/Phone Stuff/GApps}"
+  # Repo lives on internal storage now, not the SD card. Keeps this folder
+  # to just your loose .config/.zip (like it always looked before), avoids
+  # FAT/exFAT permission-bit noise entirely, and every git op runs on fast
+  # ext4 instead of SD I/O.
+  local repo_dir="$HOME/.local/share/nikgapps-config"
+  local staged=0
+
+  mkdir -p "$(dirname "$repo_dir")"
+
+  # Collect config files — space-safe
+  local config_files=()
+  while IFS= read -r -d '' f; do
+      config_files+=("$f")
+  done < <(find "$config_dir" -maxdepth 1 -name "*.config" -print0)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    echo "\e[31m  [FAIL] No .config files found in $config_dir\e[0m"
+    return 1
+  fi
+
+  echo "\e[36m==> Found ${#config_files[@]} config file(s) in $config_dir\e[0m"
+
+  # Clone or update repo
+  if [[ ! -d "$repo_dir" ]]; then
+    echo "\e[36m  --> Cloning your fork...\e[0m"
+    git clone git@github.com:Cyber-Quasar/config.git "$repo_dir" || return 1
+    cd "$repo_dir" || return 1
+    git remote add upstream git@github.com:nikgapps/config.git 2>/dev/null
+  else
+    cd "$repo_dir" || return 1
+  fi
+
+  # upstream is only added during first-time clone above. If .git already
+  # existed but upstream is missing for any reason, add it here instead
+  # of failing on the pull below.
+  git remote get-url upstream &>/dev/null || \
+    git remote add upstream git@github.com:nikgapps/config.git
+
+  # Snapshot current state before syncing — cheap insurance in case the
+  # sync goes wrong.
+  git branch -f nikgapps-pre-sync-backup
+
+  echo "\e[36m  --> Syncing with upstream...\e[0m"
+  git pull --rebase upstream main || return 1
+  git push --force-with-lease origin main || return 1
+
+  for config_file in "${config_files[@]}"; do
+    local filename=$(basename "$config_file")
+    local android_ver=$(echo "$filename" | grep -oP '(?i)(?<=A)\d+(?=_)')
+
+    if [[ -z "$android_ver" ]]; then
+      echo "\e[33m  [SKIP] $filename - could not detect Android version\e[0m"
+      continue
+    fi
+
+    if [[ ! -d "$repo_dir/$android_ver" ]]; then
+      echo "\e[33m  [SKIP] $filename - folder '$android_ver' does not exist in repo\e[0m"
+      continue
+    fi
+
+    echo "\e[36m  --> Android $android_ver detected - copying $filename to $android_ver/\e[0m"
+    cp "$config_file" "$repo_dir/$android_ver/" && \
+        echo "\e[32m    [OK] $filename\e[0m" || \
+        { echo "\e[31m    [FAIL] Could not copy $filename\e[0m"; cd "$HOME"; return 1; }
+    git add "$android_ver/$filename"
+    ((staged++))
+  done
+
+  if [[ $staged -eq 0 ]]; then
+    echo "\e[33m  [INFO] Nothing to commit.\e[0m"
+    cd "$HOME"
+    return 1
+  fi
+
+  git commit -m "Add NikGapps configs ($staged file(s))" && \
+      echo "\e[32m  [OK] Committed $staged file(s)\e[0m" || return 1
+  git push origin main && \
+      echo "\e[32m  [OK] Pushed to fork\e[0m" || return 1
+
+  echo "\e[36m  --> Creating pull request...\e[0m"
+  gh pr create \
+    --repo nikgapps/config \
+    --title "NikGapps custom configs ($staged file(s))" \
+    --body "Auto-submitted via a Z Shell function" \
+    --base main \
+    --head Cyber-Quasar:main
+
+  echo "\e[32m\n✔ Done! Check SourceForge Config-Releases in ~30 minutes for your build.\e[0m"
+  cd "$HOME"
+}
+
+# ─────────────────────────────────────────────
+# Emulation folder timestamp fix
+# ─────────────────────────────────────────────
+emutime() {
+  echo "\e[36m==> Setting Emulation folder timestamps to 1996-12-24 23:32:00 +0700...\e[0m"
+  find /storage/emulated/0/Emulation -exec touch -a -m -d "1996-12-24 23:32:00 +0700" {} +
+  echo "\e[32m✔ Done.\e[0m"
+}
+
+# ─────────────────────────────────────────────
+# Chezmoi
+# ─────────────────────────────────────────────
+{{- if eq .platform "termux" }}
+# Termux-only block
+alias sdcard='cd ~/storage/shared'
+{{- else if eq .platform "linux" }}
+# Regular Linux-only block
+alias open='xdg-open'
+{{- end }}
+
+# Shared block — applies everywhere
+export EDITOR=nvim
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
