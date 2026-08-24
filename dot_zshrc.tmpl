@@ -17,10 +17,10 @@ source $ZSH/oh-my-zsh.sh
 # ─────────────────────────────────────────────
 # Zsh aliases
 # ─────────────────────────────────────────────
-alias zshconfig="nvim ~/.zshrc"
 alias ohmyzsh="nvim ~/.oh-my-zsh"
 alias sourcesh='source ~/.zshrc'
 alias clearhist='echo >! $HISTFILE && fc -R'
+alias zshconfig='chezmoi edit --apply ~/.zshrc'
 
 # Useful aliases
 alias ls='eza -lah --icons --group-directories-first'
