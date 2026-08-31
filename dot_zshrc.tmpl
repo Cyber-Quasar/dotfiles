@@ -837,8 +837,37 @@ alias sdcard='cd ~/storage/shared'
 alias open='xdg-open'
 {{- end }}
 
+
 # Shared block — applies everywhere
 export EDITOR=nvim
+
+# ─────────────────────────────────────────────
+# Sync Syncthing-Fork with Syncthing (linux)
+# ─────────────────────────────────────────────
+
+syncthing-sync() {
+      local ZIP="/storage/emulated/0/backups/syncthing/config.zip"
+          local DEST="/storage/440D-FAF7/JUJUUU/Phone Stuff/App Backups/Syncthing"
+
+              echo "\e[32m\n==> Starting Syncthing config sync...\e[0m"
+
+                  if [[ ! -f "$ZIP" ]]; then
+                            echo "ERROR: config.zip not found:"
+                                    echo "$ZIP"
+                                            return 1
+                                                fi
+
+                                                    mkdir -p "$DEST"
+
+                                                        echo "==> Removing old Syncthing backup..."
+                                                            rm -rf "$DEST"/*(D)
+
+                                                                echo "==> Extracting config.zip..."
+                                                                    unzip -o "$ZIP" -d "$DEST"
+
+                                                                        echo "\e[32m\n==> Sync completed:\e[0m"
+                                                                            echo "\e[32m\n$DEST\e[0m"
+                                                                          }
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
