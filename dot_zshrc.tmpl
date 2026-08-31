@@ -17,10 +17,10 @@ source $ZSH/oh-my-zsh.sh
 # ─────────────────────────────────────────────
 # Zsh aliases
 # ─────────────────────────────────────────────
+alias zshconfig='chezmoi edit --apply ~/.zshrc'
 alias ohmyzsh="nvim ~/.oh-my-zsh"
 alias sourcesh='source ~/.zshrc'
 alias clearhist='echo >! $HISTFILE && fc -R'
-alias zshconfig='chezmoi edit --apply ~/.zshrc'
 
 # Useful aliases
 alias ls='eza -lah --icons --group-directories-first'
@@ -92,6 +92,10 @@ _get_sd_root() {
 # Run once. Requires the key to also be added as a Signing Key on GitHub.
 # ─────────────────────────────────────────────
 verify-dev() {
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║     SSH COMMIT SIGNING KEY SETUP     ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
     git config --global gpg.format ssh
     git config --global user.signingkey ~/.ssh/id_ed25519.pub
     git config --global commit.gpgsign true
@@ -107,6 +111,11 @@ verify-dev() {
 gitlab-mirror() {
     local repo_dir="$1"
     local gitlab_user="$2"
+
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║         GITLAB MIRROR SETUP          ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
 
     if [[ -z "$repo_dir" || -z "$gitlab_user" ]]; then
         echo "Usage: gitlab-mirror <repo_dir> <gitlab_username>"
@@ -132,7 +141,7 @@ jobs:
 
       - name: Push to GitLab
         env:
-          SSH_PRIVATE_KEY: \${{"{{"}} secrets.GITLAB_SSH_KEY {{"}}"}}
+          SSH_PRIVATE_KEY: \${{ secrets.GITLAB_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
           echo "\$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
@@ -140,7 +149,7 @@ jobs:
           eval "\$(ssh-agent -s)"
           ssh-add ~/.ssh/id_ed25519
           ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
-          git remote add gitlab git@gitlab.com:$gitlab_user/\${{"{{"}} github.event.repository.name {{"}}"}}.git
+          git remote add gitlab git@gitlab.com:$gitlab_user/\${{ github.event.repository.name }}.git
           git push gitlab main --force
 EOF
 
@@ -203,6 +212,10 @@ _tb_clean_tracked() {
 # Fully automated setup: clones, or installs + creates remote via GitHub CLI
 # ─────────────────────────────────────────────
 tb-init() {
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║          TERMUX BACKUP INIT          ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
     echo "\e[36m==> Checking termux-backup repository status...\e[0m"
 
     local TBACKUP_REPO
@@ -264,6 +277,10 @@ tb-init() {
 # termux-home-full.tar.gz → full, stays on SD card only
 # ─────────────────────────────────────────────
 termux-backup() {
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║            TERMUX BACKUP             ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
     echo "\e[36m==> Starting Termux Backup...\e[0m"
     local TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
     local FAIL=0
@@ -401,6 +418,10 @@ EOF
 # Validates both archives if present, non-breaking for full archive failures
 # ─────────────────────────────────────────────
 tb-verify() {
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║        BACKUP INTEGRITY CHECK        ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
     echo "\e[36m==> Verifying backup integrity...\e[0m"
 
     local TBACKUP_REPO
@@ -585,7 +606,7 @@ local-restore() {
     local REPORT=()
 
     echo "\e[36m╔══════════════════════════════════════╗\e[0m"
-    echo "\e[36m║      LOCAL RESTORE MODE              ║\e[0m"
+    echo "\e[36m║          LOCAL RESTORE MODE          ║\e[0m"
     echo "\e[36m╚══════════════════════════════════════╝\e[0m"
     echo ""
 
@@ -667,6 +688,12 @@ _ssh-sd-path() {
 
 _ssh-backup-run() {
     local FLAG="$1"
+
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║            SSH KEY BACKUP            ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
+
     local SOURCE="$HOME/.ssh/"
     local DEST="$(_ssh-sd-path)" || return 1
 
@@ -687,6 +714,12 @@ _ssh-backup-run() {
 
 _ssh-restore-run() {
     local FLAG="$1"
+
+    echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+    echo "\e[36m║           SSH KEY RESTORE            ║\e[0m"
+    echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+    echo ""
+
     local DEST="$HOME/.ssh/"
     local SOURCE="$(_ssh-sd-path)/" || return 1
 
@@ -724,6 +757,11 @@ ssh-restore-ignore() { _ssh-restore-run "--ignore-existing"; }
 # ─────────────────────────────────────────────
 
 nikgapps() {
+  echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+  echo "\e[36m║        NIKGAPPS CONFIG SUBMIT        ║\e[0m"
+  echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+  echo ""
+
   _get_sd_root || return 1
   local config_dir="${1:-/storage/$SD_ROOT/JUJUUU/Phone Stuff/GApps}"
   # Repo lives on internal storage now, not the SD card. Keeps this folder
@@ -821,6 +859,10 @@ nikgapps() {
 # Emulation folder timestamp fix
 # ─────────────────────────────────────────────
 emutime() {
+  echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+  echo "\e[36m║       EMULATION TIMESTAMP FIX        ║\e[0m"
+  echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+  echo ""
   echo "\e[36m==> Setting Emulation folder timestamps to 1996-12-24 23:32:00 +0700...\e[0m"
   find /storage/emulated/0/Emulation -exec touch -a -m -d "1996-12-24 23:32:00 +0700" {} +
   echo "\e[32m✔ Done.\e[0m"
@@ -829,45 +871,39 @@ emutime() {
 # ─────────────────────────────────────────────
 # Chezmoi
 # ─────────────────────────────────────────────
-{{- if eq .platform "termux" }}
-# Termux-only block
-alias sdcard='cd ~/storage/shared'
-{{- else if eq .platform "linux" }}
-# Regular Linux-only block
-alias open='xdg-open'
-{{- end }}
-
-
 # Shared block — applies everywhere
 export EDITOR=nvim
 
 # ─────────────────────────────────────────────
-# Sync Syncthing-Fork with Syncthing (linux)
+# Sync Syncthing-Fork with Syncthing (Linux)
 # ─────────────────────────────────────────────
-
 syncthing-sync() {
-      local ZIP="/storage/emulated/0/backups/syncthing/config.zip"
-          local DEST="/storage/440D-FAF7/JUJUUU/Phone Stuff/App Backups/Syncthing"
+  local ZIP="/storage/emulated/0/backups/syncthing/config.zip"
+  local DEST="/storage/440D-FAF7/JUJUUU/Phone Stuff/App Backups/Syncthing"
 
-              echo "\e[32m\n==> Starting Syncthing config sync...\e[0m"
+  echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+  echo "\e[36m║        SYNCTHING CONFIG SYNC         ║\e[0m"
+  echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+  echo ""
 
-                  if [[ ! -f "$ZIP" ]]; then
-                            echo "ERROR: config.zip not found:"
-                                    echo "$ZIP"
-                                            return 1
-                                                fi
+  if [[ ! -f "$ZIP" ]]; then
+    echo "\e[31m  [FAIL] config.zip not found: $ZIP\e[0m"
+    return 1
+  fi
 
-                                                    mkdir -p "$DEST"
+  mkdir -p "$DEST"
 
-                                                        echo "==> Removing old Syncthing backup..."
-                                                            rm -rf "$DEST"/*(D)
+  echo "\e[36m  --> Removing old Syncthing config...\e[0m"
+  rm -rf "$DEST"/*(D)
 
-                                                                echo "==> Extracting config.zip..."
-                                                                    unzip -o "$ZIP" -d "$DEST"
+  echo "\e[36m  --> Extracting new config...\e[0m"
+  unzip -o "$ZIP" -d "$DEST" > /dev/null && \
+      echo "\e[32m    [OK] Extracted to $DEST\e[0m" || \
+      { echo "\e[31m    [FAIL] Extraction failed\e[0m"; return 1; }
 
-                                                                        echo "\e[32m\n==> Sync completed:\e[0m"
-                                                                            echo "\e[32m\n$DEST\e[0m"
-                                                                          }
+  echo "\e[32m\n✔ Syncthing config synced.\e[0m"
+}
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
