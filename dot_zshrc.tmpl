@@ -141,7 +141,7 @@ jobs:
 
       - name: Push to GitLab
         env:
-          SSH_PRIVATE_KEY: \${{ secrets.GITLAB_SSH_KEY }}
+          SSH_PRIVATE_KEY: \${{"{{"}} secrets.GITLAB_SSH_KEY {{"}}"}}
         run: |
           mkdir -p ~/.ssh
           echo "\$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
@@ -149,7 +149,7 @@ jobs:
           eval "\$(ssh-agent -s)"
           ssh-add ~/.ssh/id_ed25519
           ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
-          git remote add gitlab git@gitlab.com:$gitlab_user/\${{ github.event.repository.name }}.git
+          git remote add gitlab git@gitlab.com:$gitlab_user/\${{"{{"}} github.event.repository.name {{"}}"}}.git
           git push gitlab main --force
 EOF
 
