@@ -42,17 +42,8 @@ alias update='pkg update && pkg upgrade -y && pip install --upgrade pip 2>/dev/n
 alias delete='apt purge'
 
 # ─────────────────────────────────────────────
-# SSH agent — loads the key once per shell session so SSH-signed commits
-# (gpg.format=ssh) and git push/pull don't re-prompt for the passphrase on
-# every operation. 14 commits behind upstream once meant 14 separate
-# prompts during a rebase, and a single mistyped one corrupted it mid-run.
-#
-# A restore flow (termux-restore) can run before the key even exists on
-# disk yet (fresh install, key restored partway through), so the auto-run
-# below at shell start may silently find nothing to add. _ensure_ssh_agent
-# is called again explicitly at the start of termux-restore once the key
-# is actually expected to be in place. local-restore doesn't call this —
-# it's deliberately git/SSH-free (SD-card-only, fully offline).
+# SSH agent — loads the key once per shell session so SSH-signed commits (gpg.format=ssh) and git push/pull don't re-prompt for the passphrase on every operation. 14 commits behind upstream once meant 14 separate prompts during a rebase, and a single mistyped one corrupted it mid-run.
+# A restore flow (termux-restore) can run before the key even exists on disk yet (fresh install, key restored partway through), so the auto-run below at shell start may silently find nothing to add. _ensure_ssh_agent is called again explicitly at the start of termux-restore once the key is actually expected to be in place. local-restore doesn't call this — it's deliberately git/SSH-free (SD-card-only, fully offline).
 # ─────────────────────────────────────────────
 _ensure_ssh_agent() {
     if [[ -z "$SSH_AUTH_SOCK" ]]; then
@@ -63,16 +54,8 @@ _ensure_ssh_agent() {
 _ensure_ssh_agent
 
 # ─────────────────────────────────────────────
-# SD_ROOT detection — computed once per shell session,
-# cached in-memory. Replaces three duplicated su-c/tmp-file
-# blocks previously inlined in _tb_get_repo, _ssh-sd-path,
-# and nikgapps.
-#
-# NOTE: su -c output is routed through $TMPDIR/sd_root.txt
-# rather than direct $(su -c ...) substitution. Direct command
-# substitution on su -c does not reliably return a value inside
-# zsh functions on this setup — this is not stylistic, it's a
-# workaround for that limitation.
+# SD_ROOT detection — computed once per shell session, cached in-memory. Replaces three duplicated su-c/tmp-file blocks previously inlined in _tb_get_repo, _ssh-sd-path, and nikgapps.
+# NOTE: su -c output is routed through $TMPDIR/sd_root.txt rather than direct $(su -c ...) substitution. Direct command substitution on su -c does not reliably return a value inside zsh functions on this setup — this is not stylistic, it's a workaround for that limitation.
 # ─────────────────────────────────────────────
 _get_sd_root() {
     if [[ -z "$SD_ROOT" ]]; then
@@ -88,8 +71,7 @@ _get_sd_root() {
 
 # ─────────────────────────────────────────────
 # FUNCTION: verify-dev
-# Enables SSH commit signing globally for all repos on this device.
-# Run once. Requires the key to also be added as a Signing Key on GitHub.
+# Enables SSH commit signing globally for all repos on this device. Run once. Requires the key to also be added as a Signing Key on GitHub.
 # ─────────────────────────────────────────────
 verify-dev() {
     echo "\e[36m╔══════════════════════════════════════╗\e[0m"
@@ -105,8 +87,7 @@ verify-dev() {
 
 # ─────────────────────────────────────────────
 # FUNCTION: gitlab-mirror
-# Generates and pushes a GitHub Action workflow file
-# that mirrors the repo to GitLab on every push.
+# Generates and pushes a GitHub Action workflow file that mirrors the repo to GitLab on every push.
 # ─────────────────────────────────────────────
 gitlab-mirror() {
     local repo_dir="$1"
@@ -272,6 +253,7 @@ tb-init() {
 
 # ─────────────────────────────────────────────
 # FUNCTION: termux-backup
+#
 # Full backup: configs + pkg list + two tar archives
 # termux-home.tar.gz      → slim, pushed to GitHub
 # termux-home-full.tar.gz → full, stays on SD card only
@@ -479,8 +461,7 @@ termux-restore() {
 
     _tb_ensure_git_env "$TBACKUP_REPO"
 
-    # Key may not have been present when .zshrc was first sourced during a
-    # fresh-install bootstrap — make sure it's actually loaded now.
+    # Key may not have been present when .zshrc was first sourced during a fresh-install bootstrap — make sure it's actually loaded now.
     _ensure_ssh_agent
 
     # 0. Prereqs
@@ -731,11 +712,7 @@ _ssh-restore-run() {
     su -c "mkdir -p \"$DEST\" && /data/data/com.termux/files/usr/bin/rsync -aHv $FLAG --exclude='agent/' \"$SOURCE\" \"$DEST\""
 
     if [[ $? -eq 0 ]]; then
-        # The rsync above ran as root via su, so everything it wrote to
-        # $DEST is currently owned by root. Reclaim it back to the
-        # normal user via su (only su can chown files away from root),
-        # or chmod below will fail with "Operation not permitted" and
-        # ssh will keep rejecting the key as it did before.
+        # The rsync above ran as root via su, so everything it wrote to $DEST is currently owned by root. Reclaim it back to the normal user via su (only su can chown files away from root), or chmod below will fail with "Operation not permitted" and ssh will keep rejecting the key as it did before.
         su -c "chown -R $(id -u):$(id -g) \"$DEST\""
         chmod 700 "$DEST"
         chmod 600 "$DEST"* 2>/dev/null
@@ -764,10 +741,8 @@ nikgapps() {
 
   _get_sd_root || return 1
   local config_dir="${1:-/storage/$SD_ROOT/JUJUUU/Phone Stuff/GApps}"
-  # Repo lives on internal storage now, not the SD card. Keeps this folder
-  # to just your loose .config/.zip (like it always looked before), avoids
-  # FAT/exFAT permission-bit noise entirely, and every git op runs on fast
-  # ext4 instead of SD I/O.
+
+  # Repo lives on internal storage now, not the SD card. Keeps this folder to just your loose .config/.zip (like it always looked before), avoids FAT/exFAT permission-bit noise entirely, and every git op runs on fast ext4 instead of SD I/O.
   local repo_dir="$HOME/.local/share/nikgapps-config"
   local staged=0
 
@@ -796,14 +771,11 @@ nikgapps() {
     cd "$repo_dir" || return 1
   fi
 
-  # upstream is only added during first-time clone above. If .git already
-  # existed but upstream is missing for any reason, add it here instead
-  # of failing on the pull below.
+  # upstream is only added during first-time clone above. If .git already existed but upstream is missing for any reason, add it here instead of failing on the pull below.
   git remote get-url upstream &>/dev/null || \
     git remote add upstream git@github.com:nikgapps/config.git
 
-  # Snapshot current state before syncing — cheap insurance in case the
-  # sync goes wrong.
+  # Snapshot current state before syncing — cheap insurance in case the sync goes wrong.
   git branch -f nikgapps-pre-sync-backup
 
   echo "\e[36m  --> Syncing with upstream...\e[0m"
@@ -908,7 +880,7 @@ syncthing-sync() {
 # Sync RetroArch saves/states/config to SD card backup
 # ─────────────────────────────────────────────
 retroarch-sync() {
-  local SOURCE="/storage/emulated/0/Emulation/RetroArch/"
+  local SOURCE="/storage/emulated/0/Emulation/Emulators/RetroArch/"
   local DEST="/storage/440D-FAF7/JUJUUU/Phone Stuff/App Backups/RetroArch/"
 
   echo "\e[36m╔══════════════════════════════════════╗\e[0m"
@@ -923,15 +895,7 @@ retroarch-sync() {
 
   mkdir -p "$DEST"
 
-  # -a = recursive + preserves symlinks, permissions, timestamps, group,
-  # owner, device files. -H preserves hard links, -A preserves ACLs,
-  # -X preserves extended attributes — all three are no-ops on this
-  # destination specifically, since FAT/exFAT (what the SD card uses)
-  # doesn't support hard links, ACLs, or xattrs at all; kept for intent
-  # and in case DEST ever moves to a filesystem that does support them.
-  # --delete makes this a true one-to-one mirror: anything removed from
-  # SOURCE (e.g. a stale cheat file after a database update) is also
-  # removed from DEST, not just left behind as orphaned.
+  # -a = recursive + preserves symlinks, permissions, timestamps, group, owner, device files. -H preserves hard links, -A preserves ACLs, -X preserves extended attributes — all three are no-ops on this destination specifically, since FAT/exFAT (what the SD card uses) doesn't support hard links, ACLs, or xattrs at all; kept for intent and in case DEST ever moves to a filesystem that does support them. --delete makes this a true one-to-one mirror: anything removed from SOURCE (e.g. a stale cheat file after a database update) is also removed from DEST, not just left behind as orphaned.
   echo "\e[36m  --> Syncing RetroArch folder...\e[0m"
   rsync -aHAX --delete --info=progress2 "$SOURCE" "$DEST" && \
       echo "\e[32m    [OK] Synced to $DEST\e[0m" || \
