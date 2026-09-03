@@ -863,7 +863,7 @@ emutime() {
   echo "\e[36m║       EMULATION TIMESTAMP FIX        ║\e[0m"
   echo "\e[36m╚══════════════════════════════════════╝\e[0m"
   echo ""
-  echo "\e[36m==> Setting Emulation folder timestamps to 1996-12-24 23:32:00 GMT+7\e[0m"
+  echo "\e[36m==> Setting Emulation folder timestamps to 1996-12-24 23:32:00 +0700...\e[0m"
   find /storage/emulated/0/Emulation -exec touch -a -m -d "1996-12-24 23:32:00 +0700" {} +
   echo "\e[32m✔ Done.\e[0m"
 }
@@ -902,6 +902,42 @@ syncthing-sync() {
       { echo "\e[31m    [FAIL] Extraction failed\e[0m"; return 1; }
 
   echo "\e[32m\n✔ Syncthing config synced.\e[0m"
+}
+
+# ─────────────────────────────────────────────
+# Sync RetroArch saves/states/config to SD card backup
+# ─────────────────────────────────────────────
+retroarch-sync() {
+  local SOURCE="/storage/emulated/0/Emulation/RetroArch/"
+  local DEST="/storage/440D-FAF7/JUJUUU/Phone Stuff/App Backups/RetroArch/"
+
+  echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+  echo "\e[36m║            RETROARCH SYNC            ║\e[0m"
+  echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+  echo ""
+
+  if [[ ! -d "$SOURCE" ]]; then
+    echo "\e[31m  [FAIL] Source not found: $SOURCE\e[0m"
+    return 1
+  fi
+
+  mkdir -p "$DEST"
+
+  # -a = recursive + preserves symlinks, permissions, timestamps, group,
+  # owner, device files. -H preserves hard links, -A preserves ACLs,
+  # -X preserves extended attributes — all three are no-ops on this
+  # destination specifically, since FAT/exFAT (what the SD card uses)
+  # doesn't support hard links, ACLs, or xattrs at all; kept for intent
+  # and in case DEST ever moves to a filesystem that does support them.
+  # --delete makes this a true one-to-one mirror: anything removed from
+  # SOURCE (e.g. a stale cheat file after a database update) is also
+  # removed from DEST, not just left behind as orphaned.
+  echo "\e[36m  --> Syncing RetroArch folder...\e[0m"
+  rsync -aHAX --delete --info=progress2 "$SOURCE" "$DEST" && \
+      echo "\e[32m    [OK] Synced to $DEST\e[0m" || \
+      { echo "\e[31m    [FAIL] Sync failed\e[0m"; return 1; }
+
+  echo "\e[32m\n✔ RetroArch sync complete.\e[0m"
 }
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
