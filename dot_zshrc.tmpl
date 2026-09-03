@@ -863,7 +863,7 @@ emutime() {
   echo "\e[36m║       EMULATION TIMESTAMP FIX        ║\e[0m"
   echo "\e[36m╚══════════════════════════════════════╝\e[0m"
   echo ""
-  echo "\e[36m==> Setting Emulation folder timestamps to 1996-12-24 23:32:00 +0700...\e[0m"
+  echo "\e[36m==> Setting Emulation folder timestamps to 1996-12-24 23:32:00 GMT+7\e[0m"
   find /storage/emulated/0/Emulation -exec touch -a -m -d "1996-12-24 23:32:00 +0700" {} +
   echo "\e[32m✔ Done.\e[0m"
 }
