@@ -897,7 +897,7 @@ retroarch-sync() {
 
   # -a = recursive + preserves symlinks, permissions, timestamps, group, owner, device files. -H preserves hard links, -A preserves ACLs, -X preserves extended attributes — all three are no-ops on this destination specifically, since FAT/exFAT (what the SD card uses) doesn't support hard links, ACLs, or xattrs at all; kept for intent and in case DEST ever moves to a filesystem that does support them. --delete makes this a true one-to-one mirror: anything removed from SOURCE (e.g. a stale cheat file after a database update) is also removed from DEST, not just left behind as orphaned.
   echo "\e[36m  --> Syncing RetroArch folder...\e[0m"
-  rsync -aHAX --delete --info=progress2 "$SOURCE" "$DEST" && \
+  rsync -aHv --delete --info=progress2 "$SOURCE" "$DEST" && \
       echo "\e[32m    [OK] Synced to $DEST\e[0m" || \
       { echo "\e[31m    [FAIL] Sync failed\e[0m"; return 1; }
 
