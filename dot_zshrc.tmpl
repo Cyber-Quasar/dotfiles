@@ -42,8 +42,7 @@ alias update='pkg update && pkg upgrade -y && pip install --upgrade pip 2>/dev/n
 alias delete='apt purge'
 
 # ─────────────────────────────────────────────
-# SSH agent — loads the key once per shell session so SSH-signed commits (gpg.format=ssh) and git push/pull don't re-prompt for the passphrase on every operation. 14 commits behind upstream once meant 14 separate prompts during a rebase, and a single mistyped one corrupted it mid-run.
-# A restore flow (termux-restore) can run before the key even exists on disk yet (fresh install, key restored partway through), so the auto-run below at shell start may silently find nothing to add. _ensure_ssh_agent is called again explicitly at the start of termux-restore once the key is actually expected to be in place. local-restore doesn't call this — it's deliberately git/SSH-free (SD-card-only, fully offline).
+# SSH agent — loads the key once per shell session so SSH-signed commits (gpg.format=ssh) and git push/pull don't re-prompt for the passphrase on every operation. 14 commits behind upstream once meant 14 separate prompts during a rebase, and a single mistyped one corrupted it mid-run. A restore flow (termux-restore) can run before the key even exists on disk yet (fresh install, key restored partway through), so the auto-run below at shell start may silently find nothing to add. _ensure_ssh_agent is called again explicitly at the start of termux-restore once the key is actually expected to be in place. local-restore doesn't call this — it's deliberately git/SSH-free (SD-card-only, fully offline).
 # ─────────────────────────────────────────────
 _ensure_ssh_agent() {
     if [[ -z "$SSH_AUTH_SOCK" ]]; then
@@ -54,8 +53,7 @@ _ensure_ssh_agent() {
 _ensure_ssh_agent
 
 # ─────────────────────────────────────────────
-# SD_ROOT detection — computed once per shell session, cached in-memory. Replaces three duplicated su-c/tmp-file blocks previously inlined in _tb_get_repo, _ssh-sd-path, and nikgapps.
-# NOTE: su -c output is routed through $TMPDIR/sd_root.txt rather than direct $(su -c ...) substitution. Direct command substitution on su -c does not reliably return a value inside zsh functions on this setup — this is not stylistic, it's a workaround for that limitation.
+# SD_ROOT detection — computed once per shell session, cached in-memory. Replaces three duplicated su-c/tmp-file blocks previously inlined in _tb_get_repo, _ssh-sd-path, and nikgapps. NOTE: su -c output is routed through $TMPDIR/sd_root.txt rather than direct $(su -c ...) substitution. Direct command substitution on su -c does not reliably return a value inside zsh functions on this setup — this is not stylistic, it's a workaround for that limitation.
 # ─────────────────────────────────────────────
 _get_sd_root() {
     if [[ -z "$SD_ROOT" ]]; then
@@ -70,8 +68,7 @@ _get_sd_root() {
 }
 
 # ─────────────────────────────────────────────
-# FUNCTION: verify-dev
-# Enables SSH commit signing globally for all repos on this device. Run once. Requires the key to also be added as a Signing Key on GitHub.
+# FUNCTION: verify-dev — Enables SSH commit signing globally for all repos on this device. Run once. Requires the key to also be added as a Signing Key on GitHub.
 # ─────────────────────────────────────────────
 verify-dev() {
     echo "\e[36m╔══════════════════════════════════════╗\e[0m"
@@ -86,8 +83,7 @@ verify-dev() {
 }
 
 # ─────────────────────────────────────────────
-# FUNCTION: gitlab-mirror
-# Generates and pushes a GitHub Action workflow file that mirrors the repo to GitLab on every push.
+# FUNCTION: gitlab-mirror — Generates and pushes a GitHub Action workflow file that mirrors the repo to GitLab on every push.
 # ─────────────────────────────────────────────
 gitlab-mirror() {
     local repo_dir="$1"
@@ -147,9 +143,7 @@ EOF
 }
 
 # ─────────────────────────────────────────────
-# GITHUB BACKUP SYSTEM
-# Repo: <https://github.com/Cyber-Quasar/termux-backup>
-# Backup path: SD card → JUJUUU/Phone Stuff/App Backups/Termux/
+# GITHUB BACKUP SYSTEM — Repo: <https://github.com/Cyber-Quasar/termux-backup> — Backup path: SD card → JUJUUU/Phone Stuff/App Backups/Termux/
 # ─────────────────────────────────────────────
 
 # --- Configuration ---
@@ -189,8 +183,7 @@ _tb_clean_tracked() {
 }
 
 # ─────────────────────────────────────────────
-# FUNCTION: tb-init
-# Fully automated setup: clones, or installs + creates remote via GitHub CLI
+# FUNCTION: tb-init — Fully automated setup: clones, or installs + creates remote via GitHub CLI
 # ─────────────────────────────────────────────
 tb-init() {
     echo "\e[36m╔══════════════════════════════════════╗\e[0m"
@@ -252,11 +245,7 @@ tb-init() {
 }
 
 # ─────────────────────────────────────────────
-# FUNCTION: termux-backup
-#
-# Full backup: configs + pkg list + two tar archives
-# termux-home.tar.gz      → slim, pushed to GitHub
-# termux-home-full.tar.gz → full, stays on SD card only
+# FUNCTION: termux-backup — Full backup: configs + pkg list + two tar archives — termux-home.tar.gz → slim, pushed to GitHub — termux-home-full.tar.gz → full, stays on SD card only
 # ─────────────────────────────────────────────
 termux-backup() {
     echo "\e[36m╔══════════════════════════════════════╗\e[0m"
@@ -396,8 +385,7 @@ EOF
 }
 
 # ─────────────────────────────────────────────
-# FUNCTION: tb-verify
-# Validates both archives if present, non-breaking for full archive failures
+# FUNCTION: tb-verify — Validates both archives if present, non-breaking for full archive failures
 # ─────────────────────────────────────────────
 tb-verify() {
     echo "\e[36m╔══════════════════════════════════════╗\e[0m"
@@ -441,8 +429,7 @@ tb-verify() {
 }
 
 # ─────────────────────────────────────────────
-# FUNCTION: termux-restore
-# Disaster recovery in one command.
+# FUNCTION: termux-restore — Disaster recovery in one command.
 # ─────────────────────────────────────────────
 termux-restore() {
     local FAIL=0
@@ -578,9 +565,7 @@ _tb-print-report() {
 alias tb-help='echo "tb-init | termux-backup | tb-verify | termux-restore | local-restore"'
 
 # ─────────────────────────────────────────────
-# FUNCTION: local-restore
-# Offline restore from full archive on SD card.
-# No internet or SSH key required.
+# FUNCTION: local-restore — Offline restore from full archive on SD card. No internet or SSH key required.
 # ─────────────────────────────────────────────
 local-restore() {
     local FAIL=0
@@ -741,7 +726,6 @@ nikgapps() {
 
   _get_sd_root || return 1
   local config_dir="${1:-/storage/$SD_ROOT/JUJUUU/Phone Stuff/GApps}"
-
   # Repo lives on internal storage now, not the SD card. Keeps this folder to just your loose .config/.zip (like it always looked before), avoids FAT/exFAT permission-bit noise entirely, and every git op runs on fast ext4 instead of SD I/O.
   local repo_dir="$HOME/.local/share/nikgapps-config"
   local staged=0
@@ -895,9 +879,9 @@ retroarch-sync() {
 
   mkdir -p "$DEST"
 
-  # -a = recursive + preserves symlinks, permissions, timestamps, group, owner, device files. -H preserves hard links, -A preserves ACLs, -X preserves extended attributes — all three are no-ops on this destination specifically, since FAT/exFAT (what the SD card uses) doesn't support hard links, ACLs, or xattrs at all; kept for intent and in case DEST ever moves to a filesystem that does support them. --delete makes this a true one-to-one mirror: anything removed from SOURCE (e.g. a stale cheat file after a database update) is also removed from DEST, not just left behind as orphaned.
+  # -a = recursive + preserves symlinks, permissions, timestamps, group, owner, device files. -H preserves hard links. -A and -X were tried and removed — this Termux rsync build (3.5.0) lacks libacl/libattr support entirely, so those flags error out ("ACLs are not supported on this client") rather than just being a silent no-op; would've been moot anyway since the exFAT SD card destination can't store either. -vv gives verbose file-by-file output. --delete makes this a true one-to-one mirror: anything removed from SOURCE (e.g. a stale cheat file after a database update) is also removed from DEST, not just left behind as orphaned.
   echo "\e[36m  --> Syncing RetroArch folder...\e[0m"
-  rsync -aHv --delete --info=progress2 "$SOURCE" "$DEST" && \
+  rsync -aHvv --delete --info=progress2 "$SOURCE" "$DEST" && \
       echo "\e[32m    [OK] Synced to $DEST\e[0m" || \
       { echo "\e[31m    [FAIL] Sync failed\e[0m"; return 1; }
 
