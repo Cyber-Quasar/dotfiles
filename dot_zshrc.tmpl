@@ -62,7 +62,7 @@ _get_sd_root() {
         export SD_ROOT=$(cat $TMPDIR/sd_root.txt)
         rm -f $TMPDIR/sd_root.txt
         if [[ -z "$SD_ROOT" ]]; then
-            echo "\e[31m  [FAIL] No SD card detected.\e[0m" >&2
+            echo "\e[31m  [FAILED] No SD card detected.\e[0m" >&2
             return 1
         fi
     fi
@@ -204,7 +204,7 @@ tb-init() {
     # 1. Ensure gh CLI is installed
     if ! command -v gh &> /dev/null; then
         echo "\e[36m  --> Installing GitHub CLI (gh)...\e[0m"
-        pkg install -y gh || { echo "\e[31m  [FAIL] Failed to install gh CLI.\e[0m"; return 1; }
+        pkg install -y gh || { echo "\e[31m  [FAILED] Failed to install gh CLI.\e[0m"; return 1; }
     fi
 
     # 2. Authenticate if needed
@@ -212,7 +212,7 @@ tb-init() {
         echo "\e[31m  [REQUIRED] GitHub CLI is not authenticated.\e[0m"
         echo "\e[33m  Opening interactive authentication prompt now...\e[0m"
         echo "\e[36m  (Select 'GitHub.com', choose 'SSH', and follow the browser verification steps)\e[0m\n"
-        gh auth login || { echo "\e[31m  [FAIL] Authentication cancelled or failed.\e[0m"; return 1; }
+        gh auth login || { echo "\e[31m  [FAILED] Authentication cancelled or failed.\e[0m"; return 1; }
     fi
 
     # 3. Handle local repo state
@@ -220,12 +220,12 @@ tb-init() {
         echo "\e[33m  [INFO] Local repo missing. Inspecting GitHub remote status...\e[0m"
 
         if gh repo view "Cyber-Quasar/termux-backup" &>/dev/null; then
-            echo "\e[32m  [OK] Repository detected on GitHub. Cloning over SSH...\e[0m"
+            echo "\e[32m  [SUCCESS] Repository detected on GitHub. Cloning over SSH...\e[0m"
             git clone "$TBACKUP_REMOTE" "$TBACKUP_REPO"
         else
             echo "\e[33m  [WARN] Repo not found on GitHub. Force-creating now...\e[0m"
             if gh repo create "termux-backup" --private; then
-                echo "\e[32m  [OK] Remote repository created successfully!\e[0m"
+                echo "\e[32m  [SUCCESS] Remote repository created successfully!\e[0m"
                 cd "$TBACKUP_REPO"
                 git init -b main
                 git remote add origin "$TBACKUP_REMOTE"
@@ -235,12 +235,12 @@ tb-init() {
                 git push -u origin main
                 cd "$HOME"
             else
-                echo "\e[31m  [FAIL] Failed to create repository via GitHub CLI.\e[0m"
+                echo "\e[31m  [FAILED] Failed to create repository via GitHub CLI.\e[0m"
                 return 1
             fi
         fi
     else
-        echo "\e[32m  [OK] Repo already initialized at $TBACKUP_REPO\e[0m"
+        echo "\e[32m  [SUCCESS] Repo already initialized at $TBACKUP_REPO\e[0m"
         git -C "$TBACKUP_REPO" remote set-url origin "$TBACKUP_REMOTE"
     fi
 }
@@ -270,7 +270,7 @@ termux-backup() {
     # Ensure repo exists
     if [[ ! -d "$TBACKUP_REPO/.git" ]]; then
         echo "\e[33m  [WARN] Backup repo not found. Running tb-init first.\e[0m"
-        tb-init || { echo "\e[31m  [FAIL] Init failed. Aborting.\e[0m"; return 1; }
+        tb-init || { echo "\e[31m  [FAILED] Init failed. Aborting.\e[0m"; return 1; }
     fi
 
     # 1. Copy tracked config files
@@ -279,8 +279,8 @@ termux-backup() {
     for f in "${TBACKUP_CONFIGS[@]}"; do
         if [[ -f "$f" ]]; then
             cp "$f" "$TBACKUP_REPO/configs/$(basename $f)" && \
-                echo "\e[32m    [OK] $f\e[0m" || \
-                { echo "\e[31m    [FAIL] $f\e[0m"; FAIL=1; }
+                echo "\e[32m    [SUCCESS] $f\e[0m" || \
+                { echo "\e[31m    [FAILED] $f\e[0m"; FAIL=1; }
         else
             echo "\e[33m    [SKIPPED] Not found: $f\e[0m"
         fi
@@ -289,8 +289,8 @@ termux-backup() {
     # 2. Export package list
     echo "\e[36m  --> Exporting package list...\e[0m"
     pkg list-installed 2>/dev/null | grep -v '^Listing' | awk -F'/' '{print $1}' > "$TBACKUP_PKG_LIST" && \
-        echo "\e[32m    [OK] pkg-list.txt ($(wc -l < $TBACKUP_PKG_LIST) packages)\e[0m" || \
-        { echo "\e[31m    [FAIL] Could not export pkg list\e[0m"; FAIL=1; }
+        echo "\e[32m    [SUCCESS] pkg-list.txt ($(wc -l < $TBACKUP_PKG_LIST) packages)\e[0m" || \
+        { echo "\e[31m    [FAILED] Could not export pkg list\e[0m"; FAIL=1; }
 
     # 3. GITHUB archive — slim, stays under 100MB
     echo "\e[36m  --> Creating GitHub archive (slim)...\e[0m"
@@ -304,13 +304,13 @@ termux-backup() {
         --exclude=".ssh/agent" \
         --exclude=".suroot" \
         -C "$HOME" . && \
-        echo "\e[32m    [OK] $(du -sh $TBACKUP_ARCHIVE | cut -f1)\e[0m" || \
-        { echo "\e[31m    [FAIL] GitHub tar failed\e[0m"; FAIL=1; }
+        echo "\e[32m    [SUCCESS] $(du -sh $TBACKUP_ARCHIVE | cut -f1)\e[0m" || \
+        { echo "\e[31m    [FAILED] GitHub tar failed\e[0m"; FAIL=1; }
 
     # 4. SHA256 for GitHub archive
     sha256sum "$TBACKUP_ARCHIVE" > "$TBACKUP_CHECKSUM" && \
-        echo "\e[32m    [OK] checksum: $(cut -d' ' -f1 $TBACKUP_CHECKSUM)\e[0m" || \
-        { echo "\e[31m    [FAIL] sha256sum failed\e[0m"; FAIL=1; }
+        echo "\e[32m    [SUCCESS] checksum: $(cut -d' ' -f1 $TBACKUP_CHECKSUM)\e[0m" || \
+        { echo "\e[31m    [FAILED] sha256sum failed\e[0m"; FAIL=1; }
 
     # 5. LOCAL archive — full, only skip .cache
     echo "\e[36m  --> Creating full archive...\e[0m"
@@ -321,13 +321,13 @@ termux-backup() {
         --exclude=".ssh/agent" \
         --exclude=".suroot" \
         -C "$HOME" . && \
-        echo "\e[32m    [OK] $(du -sh $TBACKUP_LOCAL_ARCHIVE | cut -f1)\e[0m" || \
-        { echo "\e[31m    [FAIL] Full tar failed\e[0m"; FAIL=1; }
+        echo "\e[32m    [SUCCESS] $(du -sh $TBACKUP_LOCAL_ARCHIVE | cut -f1)\e[0m" || \
+        { echo "\e[31m    [FAILED] Full tar failed\e[0m"; FAIL=1; }
 
     # 6. SHA256 for full archive
     sha256sum "$TBACKUP_LOCAL_ARCHIVE" > "$TBACKUP_LOCAL_CHECKSUM" && \
-        echo "\e[32m    [OK] checksum: $(cut -d' ' -f1 $TBACKUP_LOCAL_CHECKSUM)\e[0m" || \
-        { echo "\e[31m    [FAIL] Full sha256sum failed\e[0m"; FAIL=1; }
+        echo "\e[32m    [SUCCESS] checksum: $(cut -d' ' -f1 $TBACKUP_LOCAL_CHECKSUM)\e[0m" || \
+        { echo "\e[31m    [FAILED] Full sha256sum failed\e[0m"; FAIL=1; }
 
     # 7. Write metadata
     cat > "$TBACKUP_REPO/backup-meta.txt" <<EOF
@@ -369,8 +369,8 @@ EOF
         git commit -m "backup: $TIMESTAMP" && \
         git pull origin main --no-rebase 2>/dev/null && \
         git push origin HEAD --force-with-lease && \
-            echo "\e[32m  [OK] Pushed to GitHub\e[0m" || \
-            { echo "\e[31m  [FAIL] git push failed (check SSH key / internet)\e[0m"; FAIL=1; }
+            echo "\e[32m  [SUCCESS] Pushed to GitHub\e[0m" || \
+            { echo "\e[31m  [FAILED] git push failed (check SSH key / internet)\e[0m"; FAIL=1; }
     fi
     cd "$HOME"
 
@@ -409,8 +409,8 @@ tb-verify() {
         echo "  [GitHub] Stored : $STORED"
         echo "  [GitHub] Actual : $ACTUAL"
         [[ "$STORED" == "$ACTUAL" ]] && \
-            echo "\e[32m  [OK] GitHub integrity PASSED ✔\e[0m" || \
-            { echo "\e[31m  [FAIL] GitHub integrity FAILED ✘\e[0m"; return 1; }
+            echo "\e[32m  [SUCCESS] GitHub integrity PASSED ✔\e[0m" || \
+            { echo "\e[31m  [FAILED] GitHub integrity FAILED ✘\e[0m"; return 1; }
     else
         echo "\e[33m  [SKIP] GitHub archive or checksum not found\e[0m"
     fi
@@ -422,8 +422,8 @@ tb-verify() {
         echo "  [Full]   Stored : $STORED_L"
         echo "  [Full]   Actual : $ACTUAL_L"
         [[ "$STORED_L" == "$ACTUAL_L" ]] && \
-            echo "\e[32m  [OK] Full integrity PASSED ✔\e[0m" || \
-            echo "\e[31m  [FAIL] Full integrity FAILED ✘\e[0m"
+            echo "\e[32m  [SUCCESS] Full integrity PASSED ✔\e[0m" || \
+            echo "\e[31m  [FAILED] Full integrity FAILED ✘\e[0m"
     else
         echo "\e[33m  [SKIP] Full archive or checksum not found\e[0m"
     fi
@@ -455,20 +455,20 @@ termux-restore() {
     # 0. Prereqs
     echo "\e[36m[0/6] Installing prerequisites...\e[0m"
     pkg install -y git openssh rsync 2>/dev/null && \
-        { echo "\e[32m  [OK] git + openssh + rsync ready\e[0m"; REPORT+=("prereqs: OK"); } || \
-        { echo "\e[31m  [FAIL] Could not install prereqs\e[0m"; REPORT+=("prereqs: FAIL"); FAIL=1; }
+        { echo "\e[32m  [SUCCESS] git + openssh + rsync ready\e[0m"; REPORT+=("prereqs: OK"); } || \
+        { echo "\e[31m  [FAILED] Could not install prereqs\e[0m"; REPORT+=("prereqs: FAIL"); FAIL=1; }
 
     # 1. Pull from GitHub
     echo "\e[36m[1/6] Pulling backup repo from GitHub...\e[0m"
     if [[ -d "$TBACKUP_REPO/.git" ]]; then
         git -C "$TBACKUP_REPO" remote set-url origin "$TBACKUP_REMOTE"
         git -C "$TBACKUP_REPO" pull origin HEAD 2>/dev/null && \
-            { echo "\e[32m  [OK] Pulled latest\e[0m"; REPORT+=("git pull: OK"); } || \
-            { echo "\e[31m  [FAIL] git pull failed\e[0m"; REPORT+=("git pull: FAIL"); FAIL=1; }
+            { echo "\e[32m  [SUCCESS] Pulled latest\e[0m"; REPORT+=("git pull: OK"); } || \
+            { echo "\e[31m  [FAILED] git pull failed\e[0m"; REPORT+=("git pull: FAIL"); FAIL=1; }
     else
         git clone "$TBACKUP_REMOTE" "$TBACKUP_REPO" 2>/dev/null && \
-            { echo "\e[32m  [OK] Cloned repo\e[0m"; REPORT+=("git clone: OK"); } || \
-            { echo "\e[31m  [FAIL] git clone failed - check SSH key / internet\e[0m"; REPORT+=("git clone: FAIL"); FAIL=1; return 1; }
+            { echo "\e[32m  [SUCCESS] Cloned repo\e[0m"; REPORT+=("git clone: OK"); } || \
+            { echo "\e[31m  [FAILED] git clone failed - check SSH key / internet\e[0m"; REPORT+=("git clone: FAIL"); FAIL=1; return 1; }
     fi
 
     # 2. Integrity check
@@ -488,7 +488,7 @@ termux-restore() {
         for f in "$TBACKUP_REPO/configs"/*(N); do
             local dest="$HOME/$(basename $f)"
             cp "$f" "$dest" && \
-                echo "\e[32m  [OK] Restored $(basename $f)\e[0m" || \
+                echo "\e[32m  [SUCCESS] Restored $(basename $f)\e[0m" || \
                 echo "\e[33m  [WARN] Could not restore $(basename $f)\e[0m"
         done
         REPORT+=("configs: OK")
@@ -503,7 +503,7 @@ termux-restore() {
         local PKG_COUNT=$(wc -l < "$TBACKUP_PKG_LIST")
         echo "  Installing $PKG_COUNT packages..."
         xargs pkg install -y < "$TBACKUP_PKG_LIST" 2>>"$HOME/.termux-restore.log" && \
-            { echo "\e[32m  [OK] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
+            { echo "\e[32m  [SUCCESS] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
             { echo "\e[33m  [WARN] Some packages may have failed - see ~/.termux-restore.log\e[0m"; REPORT+=("packages: PARTIAL"); }
     else
         echo "\e[33m  [SKIP] pkg-list.txt not found\e[0m"
@@ -514,7 +514,7 @@ termux-restore() {
     echo "\e[36m[5/6] Extracting home archive...\e[0m"
     if [[ -f "$TBACKUP_ARCHIVE" ]]; then
         tar -zxf "$TBACKUP_ARCHIVE" -C "$HOME" --keep-newer-files 2>/dev/null
-        echo "\e[32m  [OK] Slim archive extracted\e[0m"
+        echo "\e[32m  [SUCCESS] Slim archive extracted\e[0m"
         REPORT+=("slim archive: OK")
     else
         echo "\e[33m  [SKIP] No slim archive found\e[0m"
@@ -525,7 +525,7 @@ termux-restore() {
     echo "\e[36m  --> Looking for full archive...\e[0m"
     if [[ -f "$TBACKUP_LOCAL_ARCHIVE" ]]; then
         tar -zxf "$TBACKUP_LOCAL_ARCHIVE" -C "$HOME" --keep-newer-files 2>/dev/null
-        echo "\e[32m  [OK] Full archive extracted\e[0m"
+        echo "\e[32m  [SUCCESS] Full archive extracted\e[0m"
         REPORT+=("full archive: OK")
     else
         echo "\e[33m  [SKIP] Full archive not found\e[0m"
@@ -586,16 +586,16 @@ local-restore() {
     # 0. Prereqs
     echo "\e[36m[0/4] Installing prerequisites...\e[0m"
     pkg install -y rsync 2>/dev/null && \
-        { echo "\e[32m  [OK] rsync ready\e[0m"; REPORT+=("prereqs: OK"); } || \
-        { echo "\e[31m  [FAIL] Could not install prereqs\e[0m"; REPORT+=("prereqs: FAIL"); FAIL=1; }
+        { echo "\e[32m  [SUCCESS] rsync ready\e[0m"; REPORT+=("prereqs: OK"); } || \
+        { echo "\e[31m  [FAILED] Could not install prereqs\e[0m"; REPORT+=("prereqs: FAIL"); FAIL=1; }
 
     # 1. Find full archive
     echo "\e[36m[1/4] Looking for full archive...\e[0m"
     if [[ -f "$ARCHIVE" ]]; then
-        echo "\e[32m  [OK] Full archive found on SD card\e[0m"
+        echo "\e[32m  [SUCCESS] Full archive found on SD card\e[0m"
         REPORT+=("archive: OK")
     else
-        echo "\e[31m  [FAIL] No full archive found at $ARCHIVE\e[0m"
+        echo "\e[31m  [FAILED] No full archive found at $ARCHIVE\e[0m"
         REPORT+=("archive: FAIL")
         _tb-print-report "${REPORT[@]}"
         return 1
@@ -609,10 +609,10 @@ local-restore() {
         echo "  Stored : $STORED"
         echo "  Actual : $ACTUAL"
         if [[ "$STORED" == "$ACTUAL" ]]; then
-            echo "\e[32m  [OK] Integrity check PASSED ✔\e[0m"
+            echo "\e[32m  [SUCCESS] Integrity check PASSED ✔\e[0m"
             REPORT+=("integrity: PASS")
         else
-            echo "\e[31m  [FAIL] Integrity check FAILED - archive may be corrupted\e[0m"
+            echo "\e[31m  [FAILED] Integrity check FAILED - archive may be corrupted\e[0m"
             REPORT+=("integrity: FAIL")
             _tb-print-report "${REPORT[@]}"
             return 1
@@ -628,7 +628,7 @@ local-restore() {
         local PKG_COUNT=$(wc -l < "$PKG_LIST")
         echo "  Installing $PKG_COUNT packages..."
         xargs pkg install -y < "$PKG_LIST" 2>>"$HOME/.termux-restore.log" && \
-            { echo "\e[32m  [OK] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
+            { echo "\e[32m  [SUCCESS] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
             { echo "\e[33m  [WARN] Some packages may have failed - see ~/.termux-restore.log\e[0m"; REPORT+=("packages: PARTIAL"); }
     else
         echo "\e[33m  [SKIP] No pkg-list.txt found\e[0m"
@@ -638,7 +638,7 @@ local-restore() {
     # 4. Extract full archive — true dump, no --keep-newer-files
     echo "\e[36m[4/4] Extracting full archive...\e[0m"
     tar -zxf "$ARCHIVE" -C "$HOME" 2>/dev/null
-    echo "\e[32m  [OK] Archive extracted\e[0m"
+    echo "\e[32m  [SUCCESS] Archive extracted\e[0m"
     REPORT+=("extract: OK")
 
     _tb-print-report "${REPORT[@]}"
@@ -740,7 +740,7 @@ nikgapps() {
   done < <(find "$config_dir" -maxdepth 1 -name "*.config" -print0)
 
   if [[ ${#config_files[@]} -eq 0 ]]; then
-    echo "\e[31m  [FAIL] No .config files found in $config_dir\e[0m"
+    echo "\e[31m  [FAILED] No .config files found in $config_dir\e[0m"
     return 1
   fi
 
@@ -783,8 +783,8 @@ nikgapps() {
 
     echo "\e[36m  --> Android $android_ver detected - copying $filename to $android_ver/\e[0m"
     cp "$config_file" "$repo_dir/$android_ver/" && \
-        echo "\e[32m    [OK] $filename\e[0m" || \
-        { echo "\e[31m    [FAIL] Could not copy $filename\e[0m"; cd "$HOME"; return 1; }
+        echo "\e[32m    [SUCCESS] $filename\e[0m" || \
+        { echo "\e[31m    [FAILED] Could not copy $filename\e[0m"; cd "$HOME"; return 1; }
     git add "$android_ver/$filename"
     ((staged++))
   done
@@ -796,9 +796,9 @@ nikgapps() {
   fi
 
   git commit -m "Add NikGapps configs ($staged file(s))" && \
-      echo "\e[32m  [OK] Committed $staged file(s)\e[0m" || return 1
+      echo "\e[32m  [SUCCESS] Committed $staged file(s)\e[0m" || return 1
   git push origin main && \
-      echo "\e[32m  [OK] Pushed to fork\e[0m" || return 1
+      echo "\e[32m  [SUCCESS] Pushed to fork\e[0m" || return 1
 
   echo "\e[36m  --> Creating pull request...\e[0m"
   gh pr create \
@@ -829,7 +829,7 @@ emutime() {
 # Chezmoi
 # ─────────────────────────────────────────────
 # Shared block — applies everywhere
-export EDITOR=nvim
+  export EDITOR=nvim
 
 # ─────────────────────────────────────────────
 # Sync Syncthing-Fork with Syncthing (Linux)
@@ -844,7 +844,7 @@ syncthing-sync() {
   echo ""
 
   if [[ ! -f "$ZIP" ]]; then
-    echo "\e[31m  [FAIL] config.zip not found: $ZIP\e[0m"
+    echo "\e[31m  [FAILED] config.zip not found: $ZIP\e[0m"
     return 1
   fi
 
@@ -854,9 +854,15 @@ syncthing-sync() {
   rm -rf "$DEST"/*(D)
 
   echo "\e[36m  --> Extracting new config...\e[0m"
-  unzip -o "$ZIP" -d "$DEST" > /dev/null && \
-      echo "\e[32m    [OK] Extracted to $DEST\e[0m" || \
-      { echo "\e[31m    [FAIL] Extraction failed\e[0m"; return 1; }
+  mkdir -p "$DEST/Extracted"
+  unzip -o "$ZIP" -d "$DEST/Extracted" > /dev/null && \
+      echo "\e[32m    [SUCCESS] Extracted to $DEST/Extracted\e[0m" || \
+      { echo "\e[31m    [FAILED] Extraction failed\e[0m"; return 1; }
+
+  echo "\e[36m  --> Copying config.zip into backup...\e[0m"
+  cp -p "$ZIP" "$DEST/config.zip" && \
+      echo "\e[32m    [SUCCESS] Copied to $DEST/config.zip\e[0m" || \
+      { echo "\e[31m    [FAILED] Copy failed\e[0m"; return 1; }
 
   echo "\e[32m\n✔ Syncthing config synced.\e[0m"
 }
@@ -874,7 +880,7 @@ retroarch-sync() {
   echo ""
 
   if [[ ! -d "$SOURCE" ]]; then
-    echo "\e[31m  [FAIL] Source not found: $SOURCE\e[0m"
+    echo "\e[31m  [FAILED] Source not found: $SOURCE\e[0m"
     return 1
   fi
 
@@ -883,8 +889,8 @@ retroarch-sync() {
   # -a = recursive + preserves symlinks, permissions, timestamps, group, owner, device files. -H preserves hard links. -A and -X were tried and removed — this Termux rsync build (3.5.0) lacks libacl/libattr support entirely, so those flags error out ("ACLs are not supported on this client") rather than just being a silent no-op; would've been moot anyway since the exFAT SD card destination can't store either. -vv gives verbose file-by-file output. --delete makes this a true one-to-one mirror: anything removed from SOURCE (e.g. a stale cheat file after a database update) is also removed from DEST, not just left behind as orphaned.
   echo "\e[36m  --> Syncing RetroArch folder...\e[0m"
   rsync -aHvv --delete --info=progress2 "$SOURCE" "$DEST" && \
-      echo "\e[32m    [OK] Synced to $DEST\e[0m" || \
-      { echo "\e[31m    [FAIL] Sync failed\e[0m"; return 1; }
+      echo "\e[32m    [SUCCESS] Synced to $DEST\e[0m" || \
+      { echo "\e[31m    [FAILED] Sync failed\e[0m"; return 1; }
 
   echo "\e[32m\n✔ RetroArch sync complete.\e[0m"
 }
