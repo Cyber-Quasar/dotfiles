@@ -820,8 +820,41 @@ emutime() {
   echo "\e[36m║       EMULATION TIMESTAMP FIX        ║\e[0m"
   echo "\e[36m╚══════════════════════════════════════╝\e[0m"
   echo ""
-  echo "\e[36m==> Setting Emulation folder timestamps to 1996-12-24 23:32:00 +0700...\e[0m"
-  find /storage/emulated/0/Emulation -exec touch -a -m -d "1996-12-24 23:32:00 +0700" {} +
+
+  if ! command -v fzf &>/dev/null; then
+    echo "\e[31m  [FAILED] fzf not installed. Run: pkg install fzf\e[0m"
+    return 1
+  fi
+
+  local BASE="/storage/emulated/0/Emulation"
+
+  echo "\e[36m==> Select folders to EXCLUDE (TAB=multi-select, ENTER=confirm, ESC=exclude nothing)...\e[0m"
+  echo "\e[33m  (scanning $BASE — can take ~20s on a large folder before the picker appears)\e[0m"
+  local RAW
+  RAW="$(find "$BASE" -mindepth 1 -type d | fzf -m --prompt="Exclude> " --header="TAB=select, ENTER=confirm, ESC=none")"
+  local EXCLUDES=()
+  [[ -n "$RAW" ]] && EXCLUDES=("${(f)RAW}")
+
+  local PRUNE_EXPR=()
+  local i=1
+  for e in "${EXCLUDES[@]}"; do
+    [[ $i -gt 1 ]] && PRUNE_EXPR+=(-o)
+    PRUNE_EXPR+=(-path "$e")
+    ((i++))
+  done
+
+  if [[ ${#EXCLUDES[@]} -gt 0 ]]; then
+    echo "\e[36m  --> Excluding ${#EXCLUDES[@]} folder(s):\e[0m"
+    for e in "${EXCLUDES[@]}"; do
+      echo "\e[33m    - $e\e[0m"
+    done
+    echo "\e[36m==> Setting timestamps (excluded folders skipped)...\e[0m"
+    find "$BASE" \( "${PRUNE_EXPR[@]}" \) -prune -o -exec touch -a -m -d "1996-12-24 23:32:00 +0700" {} +
+  else
+    echo "\e[36m==> Setting timestamps for entire Emulation folder...\e[0m"
+    find "$BASE" -exec touch -a -m -d "1996-12-24 23:32:00 +0700" {} +
+  fi
+
   echo "\e[32m✔ Done.\e[0m"
 }
 
@@ -829,7 +862,7 @@ emutime() {
 # Chezmoi
 # ─────────────────────────────────────────────
 # Shared block — applies everywhere
-  export EDITOR=nvim
+export EDITOR=nvim
 
 # ─────────────────────────────────────────────
 # Sync Syncthing-Fork with Syncthing (Linux)
