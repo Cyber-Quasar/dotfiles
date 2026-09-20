@@ -17,9 +17,8 @@ source $ZSH/oh-my-zsh.sh
 # ─────────────────────────────────────────────
 # Zsh aliases
 # ─────────────────────────────────────────────
-alias zshconfig='chezmoi edit --apply ~/.zshrc'
+alias zshconfig='chezmoi edit --apply ~/.zshrc && source ~/.zshrc'
 alias ohmyzsh="nvim ~/.oh-my-zsh"
-alias sourcesh='source ~/.zshrc'
 alias clearhist='echo >! $HISTFILE && fc -R'
 
 # Useful aliases
@@ -101,7 +100,7 @@ gitlab-mirror() {
     fi
 
     cd "$repo_dir" || return 1
-    mkdir .github/workflows
+    mkdir -p .github/workflows
 
     cat > .github/workflows/mirror-to-gitlab.yml <<EOF
 name: Mirror to GitLab
@@ -119,7 +118,7 @@ jobs:
 
       - name: Push to GitLab
         env:
-          SSH_PRIVATE_KEY: \${{ secrets.GITLAB_SSH_KEY }}
+          SSH_PRIVATE_KEY: \${{"{{"}} secrets.GITLAB_SSH_KEY {{"}}"}}
         run: |
           mkdir -p ~/.ssh
           echo "\$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
@@ -127,7 +126,7 @@ jobs:
           eval "\$(ssh-agent -s)"
           ssh-add ~/.ssh/id_ed25519
           ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
-          git remote add gitlab git@gitlab.com:$gitlab_user/\${{ github.event.repository.name }}.git
+          git remote add gitlab git@gitlab.com:$gitlab_user/\${{"{{"}} github.event.repository.name {{"}}"}}.git
           git push gitlab main --force
 EOF
 
@@ -333,7 +332,7 @@ termux-backup() {
     cat > "$TBACKUP_REPO/backup-meta.txt" <<EOF
 Backup Timestamp  : $TIMESTAMP
 Hostname          : $(uname -n)
-Arch              : $(uname -m)
+Architecture      : $(uname -m)
 Termux Packages   : $(wc -l < $TBACKUP_PKG_LIST)
 GitHub Archive    : $(du -sh $TBACKUP_ARCHIVE | cut -f1)
 Full Archive      : $(du -sh $TBACKUP_LOCAL_ARCHIVE | cut -f1)
@@ -341,7 +340,41 @@ SHA256 (GitHub)   : $(cut -d' ' -f1 $TBACKUP_CHECKSUM)
 SHA256 (Full)     : $(cut -d' ' -f1 $TBACKUP_LOCAL_CHECKSUM)
 EOF
 
-    # 8. Git commit and push
+    # 8. Generate README — scans what's actually in the repo, never goes stale
+    echo "\e[36m  --> Generating README...\e[0m"
+    {
+        echo "# Termux Backup"
+        echo ""
+        echo "Last updated: $TIMESTAMP"
+        echo ""
+        echo "## Configs (configs/)"
+        for f in "$TBACKUP_REPO"/configs/*(DN); do
+            echo "- $(basename "$f")"
+        done
+        echo ""
+        echo "## Packages"
+        echo "$(wc -l < "$TBACKUP_PKG_LIST") packages — listed below"
+        echo ""
+        echo "(you can also see [\`pkg-list.txt\`](pkg-list.txt))"
+        echo ""
+        local PKGS=("${(@f)$(<"$TBACKUP_PKG_LIST")}")
+        local WRAPPED=()
+        for p in "${PKGS[@]}"; do
+            WRAPPED+=("\`$p\`")
+        done
+        echo "${(j:; :)WRAPPED}"
+        echo ""
+        echo "## Archives"
+        echo "- termux-home.tar.gz ($(du -sh "$TBACKUP_ARCHIVE" | cut -f1)) — slim, pushed to GitHub"
+        echo "- termux-home-full.tar.gz ($(du -sh "$TBACKUP_LOCAL_ARCHIVE" | cut -f1)) — full, stays on SD card only (gitignored, never pushed)"
+        echo ""
+        echo "## Restore"
+        echo "Run \`termux-restore\` (slim, needs internet + SSH) or \`local-restore\` (full, offline, SD card only)."
+    } > "$TBACKUP_REPO/README.md" && \
+        echo "\e[32m    [SUCCESS] README.md\e[0m" || \
+        { echo "\e[31m    [FAILED] README generation failed\e[0m"; FAIL=1; }
+
+    # 9. Git commit and push
     echo "\e[36m  --> Committing to GitHub...\e[0m"
     cd "$TBACKUP_REPO"
 
@@ -362,6 +395,7 @@ EOF
     git add termux-home.tar.gz
     git add termux-home.tar.gz.sha256
     git add backup-meta.txt
+    git add README.md
 
     if [[ -z "$(git status --porcelain)" ]]; then
         echo "\e[33m  [INFO] Nothing changed since last backup.\e[0m"
