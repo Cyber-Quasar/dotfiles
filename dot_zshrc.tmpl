@@ -119,7 +119,7 @@ jobs:
 
       - name: Push to GitLab
         env:
-          SSH_PRIVATE_KEY: \${{"{{"}} secrets.GITLAB_SSH_KEY {{"}}"}}
+          SSH_PRIVATE_KEY: \${{ secrets.GITLAB_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
           echo "\$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
@@ -127,7 +127,7 @@ jobs:
           eval "\$(ssh-agent -s)"
           ssh-add ~/.ssh/id_ed25519
           ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
-          git remote add gitlab git@gitlab.com:$gitlab_user/\${{"{{"}} github.event.repository.name {{"}}"}}.git
+          git remote add gitlab git@gitlab.com:$gitlab_user/\${{ github.event.repository.name }}.git
           git push gitlab main --force
 EOF
 
@@ -931,3 +931,13 @@ retroarch-sync() {
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
+# ─────────────────────────────────────────────
+# Minimal right-prompt (RPS1) override — time + last command duration.
+# Loads after ~/.p10k.zsh, so these two segments take priority over
+# whatever the wizard set for the right side. Run `p10k configure` to
+# fully redo colors/icons/segments; delete this block to fall back to
+# whatever ~/.p10k.zsh already defines on its own.
+# ─────────────────────────────────────────────
+typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(command_execution_time time)
+typeset -g POWERLEVEL9K_TIME_FORMAT='%D{%H:%M:%S}'
+typeset -g POWERLEVEL9K_COMMAND_EXECUTION_TIME_THRESHOLD=3
