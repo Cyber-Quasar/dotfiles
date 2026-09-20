@@ -1,0 +1,10 @@
+[safe]
+	directory = /storage/440D-FAF7/JUJUUU/Phone Stuff/App Backups/Termux
+[user]
+	email = mm.juan.xj@gmail.com
+	name = CyberQuasar
+	signingkey = /data/data/com.termux/files/home/.ssh/id_ed25519.pub
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = true
