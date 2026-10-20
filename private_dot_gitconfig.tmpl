@@ -1,6 +1,22 @@
 [gpg]
 	format = ssh
+
 [user]
+	name = CyberQuasar
+	email = mm.juan.xj@gmail.com
 	signingkey = /data/data/com.termux/files/home/.ssh/id_ed25519.pub
+
 [commit]
 	gpgsign = true
+
+[pull]
+	rebase = true
+
+[safe]
+	directory = /storage/emulated/0/backups/Termux
+{{- if and (eq .chezmoi.os "linux") (hasKey .chezmoi "osRelease") (eq .chezmoi.osRelease.id "android") }}
+	directory = /storage/440D-FAF7/Phone Stuff/App Backups/Termux
+	directory = /storage/440D-FAF7/JUJUUU/Phone Stuff/GApps
+	directory = /storage/440D-FAF7/JUJUUU/Phone Stuff/App Backups/Termux
+{{- end }}
+

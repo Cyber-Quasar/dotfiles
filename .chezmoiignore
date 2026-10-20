@@ -1,5 +1,5 @@
 # .chezmoiignore
-{{- if ne .platform "termux" }}
+{{- if not (contains "com.termux" .chezmoi.homeDir) }}
 dot_termux
 {{- end }}
 
