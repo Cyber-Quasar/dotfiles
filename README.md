@@ -9,10 +9,9 @@ This list is generated automatically by a git pre-commit hook — see `scripts/u
 <!-- MANAGED_FILES_START -->
 - `~/.gitconfig`
 - `~/.p10k.zsh`
-- `~/.termux/font.ttf`
-- `~/.termux/termux.properties`
 - `~/.zshrc`
 - `~/README.md`
+- `~/scripts/update-readme.sh`
 <!-- MANAGED_FILES_END -->
 
 ## Platform separation
