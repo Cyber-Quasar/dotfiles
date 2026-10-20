@@ -876,8 +876,15 @@ nikgapps() {
     return 1
   fi
 
-  git commit -m "Add NikGapps configs ($staged file(s))" && \
-      echo "\e[32m  [SUCCESS] Committed $staged file(s)\e[0m" || return 1
+  local message="Added a custom NikGapps config"
+
+  if [[ $staged -gt 1 ]]; then
+    message="Added $staged custom NikGapps configs"
+  fi
+
+    git commit -m "$message" && \
+    echo "\e[32m  [SUCCESS] Committed $staged file(s)\e[0m" || return 1
+
       
   # Force push cleanly since local history was reset to upstream
   git push --force-with-lease origin main && \
