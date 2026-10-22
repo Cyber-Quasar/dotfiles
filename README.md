@@ -6,11 +6,11 @@ Personal dotfiles managed with [chezmoi](https://chezmoi.io), synced across Term
 
 These entries are discovered from the repository's chezmoi source filenames. They describe the configuration stored in Git, not necessarily the files currently managed on every device.
 
-| Source entry |
-| --- |
-| `private_dot_gitconfig.tmpl` |
-| `private_dot_p10k.zsh.tmpl` |
-| `private_dot_zshrc.tmpl` |
+| Original filename (target) | Chezmoi source entry | Type |
+| --- | --- | --- |
+| `~/.gitconfig` | `private_dot_gitconfig.tmpl` | Private Template Template |
+| `~/.p10k.zsh` | `private_dot_p10k.zsh.tmpl` | Private Template Template |
+| `~/.zshrc` | `private_dot_zshrc.tmpl` | Private Template Template |
 
 ## Platform separation
 

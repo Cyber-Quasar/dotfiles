@@ -78,31 +78,189 @@ git ls-files --cached --others --exclude-standard |
   done >"$FILES_TMP"
 
 # ---------------------------------------------------------------------------
-# Identify chezmoi source entries
-# ---------------------------------------------------------------------------
+# Identify chezmoi source entries and decode their target filenames.
+#
+# Output columns, separated by tabs:
+#   target path, source entry, type
 
-# List source entry filenames, not device-specific managed targets.
-# Exclude repository documentation, workflows, and helper scripts.
-while IFS= read -r path; do
-  case "$path" in
-  README.md | README.template.md | .chezmoiignore | .github/* | scripts/*)
-    continue
-    ;;
+decode_target_component() {
+  local component="$1"
+
+  # .tmpl changes processing, not the destination filename.
+  [[ "$component" == *.tmpl ]] && component="${component%.tmpl}"
+
+  while :; do
+    case "$component" in
+      literal_*)
+        component="${component#literal_}"
+        break
+        ;;
+      dot_*)
+        component=".${component#dot_}"
+        break
+        ;;
+      private_* | executable_* | readonly_* | symlink_* | empty_* | \
+      encrypted_* | exact_* | create_* | modify_* | remove_* | \
+      run_* | before_* | after_* | once_*)
+        component="${component#*_}"
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  printf '%s' "$component"
+}
+
+describe_source_entry() {
+  local component="$1"
+  local is_template=0
+  local is_private=0
+  local is_executable=0
+  local is_readonly=0
+  local is_symlink=0
+  local is_empty=0
+  local is_encrypted=0
+  local is_exact=0
+  local is_create=0
+  local is_modify=0
+  local is_remove=0
+  local is_action=0
+  local -a labels=()
+
+  if [[ "$component" == *.tmpl ]]; then
+    is_template=1
+    component="${component%.tmpl}"
+  fi
+
+  while :; do
+    case "$component" in
+      literal_*)
+        component="${component#literal_}"
+        break
+        ;;
+      dot_*)
+        component="${component#dot_}"
+        break
+        ;;
+      private_*)
+        is_private=1
+        component="${component#private_}"
+        ;;
+      executable_*)
+        is_executable=1
+        component="${component#executable_}"
+        ;;
+      readonly_*)
+        is_readonly=1
+        component="${component#readonly_}"
+        ;;
+      symlink_*)
+        is_symlink=1
+        component="${component#symlink_}"
+        ;;
+      empty_*)
+        is_empty=1
+        component="${component#empty_}"
+        ;;
+      encrypted_*)
+        is_encrypted=1
+        component="${component#encrypted_}"
+        ;;
+      exact_*)
+        is_exact=1
+        component="${component#exact_}"
+        ;;
+      create_*)
+        is_create=1
+        component="${component#create_}"
+        ;;
+      modify_*)
+        is_modify=1
+        component="${component#modify_}"
+        ;;
+      remove_*)
+        is_remove=1
+        component="${component#remove_}"
+        ;;
+      run_* | before_* | after_* | once_*)
+        is_action=1
+        component="${component#*_}"
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  if (( is_action )); then
+    labels+=("Lifecycle script")
+  else
+    (( is_private )) && labels+=("Private")
+    (( is_executable )) && labels+=("Executable")
+    (( is_readonly )) && labels+=("Read-only")
+    (( is_symlink )) && labels+=("Symlink")
+    (( is_empty )) && labels+=("Empty")
+    (( is_encrypted )) && labels+=("Encrypted")
+    (( is_exact )) && labels+=("Exact")
+    (( is_create )) && labels+=("Create")
+    (( is_modify )) && labels+=("Modify")
+    (( is_remove )) && labels+=("Remove")
+
+    if (( is_template )); then
+      labels+=("Template")
+    else
+      labels+=("Regular file")
+    fi
+  fi
+
+  if (( is_template )); then
+    labels+=("Template")
+  fi
+
+  local IFS=' '
+  printf '%s' "${labels[*]}"
+}
+
+while IFS= read -r source_path; do
+  case "$source_path" in
+    README.md | README.template.md | .chezmoiignore | .github/* | scripts/*)
+      continue
+      ;;
   esac
 
-  name="${path##*/}"
+  source_name="${source_path##*/}"
+  source_type="$(describe_source_entry "$source_name")"
 
-  case "$name" in
-  dot_* | private_* | executable_* | readonly_* | symlink_* | empty_* | \
-    create_* | modify_* | remove_* | encrypted_* | literal_* | exact_* | \
-    run_* | before_* | after_*)
-    printf '%s\n' "$path"
-    ;;
+  # Lifecycle scripts are actions, not ordinary destination files.
+  case "$source_name" in
+    run_* | before_* | after_* | once_*)
+      target_path="—"
+      ;;
+    *)
+      target_path=""
+      IFS='/' read -r -a components <<< "$source_path"
+
+      for component in "${components[@]}"; do
+        decoded="$(decode_target_component "$component")"
+
+        if [[ -z "$target_path" ]]; then
+          target_path="$decoded"
+        else
+          target_path="$target_path/$decoded"
+        fi
+      done
+
+      target_path="~/$target_path"
+      ;;
   esac
-done <"$FILES_TMP" |
-  LC_ALL=C sort >"$SOURCE_TMP"
 
-# ---------------------------------------------------------------------------
+  printf '%s\t%s\t%s\n' \
+    "$target_path" "$source_path" "$source_type"
+done < "$FILES_TMP" |
+  LC_ALL=C sort -t "$(printf '\t')" -k1,1 -k2,2 > "$SOURCE_TMP"
+
 # Generate a properly sorted directory tree
 # ---------------------------------------------------------------------------
 
@@ -176,18 +334,23 @@ awk '
 
 # ---------------------------------------------------------------------------
 # Render README.md from the template
-# ---------------------------------------------------------------------------
 
 awk \
   -v source_file="$SOURCE_TMP" \
   -v tree_file="$TREE_TMP" '
     $0 == "<!-- GENERATED:MANAGED_FILES -->" {
-        print "| Source entry |"
-        print "| --- |"
+        print "| Original filename (target) | Chezmoi source entry | Type |"
+        print "| --- | --- | --- |"
 
         while ((getline line < source_file) > 0) {
-            gsub(/\|/, "\\|", line)
-            print "| `" line "` |"
+            count = split(line, columns, "\t")
+
+            for (i = 1; i <= count; i++) {
+                gsub(/\|/, "\\|", columns[i])
+            }
+
+            printf "| `%s` | `%s` | %s |\n", \
+                columns[1], columns[2], columns[3]
         }
 
         close(source_file)
@@ -212,7 +375,6 @@ awk \
     }
 ' "$TEMPLATE" >"$TMP"
 
-# ---------------------------------------------------------------------------
 # Replace README only if its content changed
 # ---------------------------------------------------------------------------
 
