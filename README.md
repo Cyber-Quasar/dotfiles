@@ -14,7 +14,6 @@ The list below is generated from chezmoi's managed targets that currently exist 
 | `README.md` |
 | `README.template.md` |
 | `scripts` |
-| `scripts/README.template.md` |
 | `scripts/update-readme.sh` |
 
 ## Platform separation
@@ -57,7 +56,6 @@ dotfiles/
 ├── private_dot_p10k.zsh.tmpl
 ├── private_dot_zshrc.tmpl
 └── scripts/
-    ├── README.template.md
     └── update-readme.sh
 ```
 
