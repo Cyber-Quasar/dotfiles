@@ -1,44 +1,40 @@
 name: Update README
 
 on:
-push:
-branches:
-- main
-paths-ignore:
-- README.md
-
-workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - README.md
+  workflow_dispatch:
 
 permissions:
-contents: write
+  contents: write
 
 concurrency:
-group: update-readme
-cancel-in-progress: false
+  group: update-readme
+  cancel-in-progress: false
 
 jobs:
-update-readme:
-runs-on: ubuntu-latest
+  update-readme:
+    runs-on: ubuntu-latest
 
-steps:
-  - name: Check out repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-  - name: Set up Git
-    run: |
-      git config user.name "github-actions[bot]"
-      git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Generate README
+        run: bash scripts/update-readme.sh
 
-  - name: Generate README
-    run: bash scripts/update-readme.sh
+      - name: Commit and push changes
+        run: |
+          if git diff --cached --quiet; then
+            echo "README is already up to date."
+            exit 0
+          fi
 
-  - name: Commit and push changes
-    run: |
-      if git diff --cached --quiet; then
-        echo "README is already up to date."
-        exit 0
-      fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      git commit -m "Update generated README"
-      git push origin HEAD:main
-
+          git commit -m "Update generated README"
+          git push origin HEAD:main
