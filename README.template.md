@@ -2,9 +2,9 @@
 
 Personal dotfiles managed with [chezmoi](https://chezmoi.io), synced across Termux (Android) and Linux from a single repository.
 
-## What's tracked
+## Chezmoi source entries
 
-The list below is generated from chezmoi's managed targets that currently exist on this device.
+These entries are discovered from the repository's chezmoi source filenames. They describe the configuration stored in Git, not necessarily the files currently managed on every device.
 
 <!-- GENERATED:MANAGED_FILES -->
 
@@ -30,11 +30,11 @@ Each machine needs `~/.config/chezmoi/chezmoi.toml`.
 
 Termux-only files are skipped on non-Termux machines through `.chezmoiignore`.
 
-## Repository layout
+## Chezmoi source entries
 
-This inventory is generated from files in the repository that Git tracks or recognizes as non-ignored untracked files.
+These entries are discovered from the repository's chezmoi source filenames. They describe the configuration stored in Git, not necessarily the files currently managed on every device.
 
-<!-- GENERATED:REPO_FILES -->
+<!-- GENERATED:MANAGED_FILES -->
 
 ## Restore managed files from GitHub
 
