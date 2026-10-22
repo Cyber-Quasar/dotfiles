@@ -1,114 +1,221 @@
-#!/bin/sh
-# Regenerates README.md from README.template.md and the current repository.
-# Updates the managed-file list and repository file inventory automatically.
-# Can be run manually or installed as a Git pre-commit hook.
+#!/data/data/com.termux/files/usr/bin/bash
+#
+# Generate README.md from README.template.md.
+# Dynamically generates:
+#   - The list of files managed by chezmoi.
+#   - The repository layout as a proper directory tree.
+#
+# Required template markers:
+#   <!-- GENERATED:MANAGED_FILES -->
+#   <!-- GENERATED:REPO_FILES -->
+#
 
 set -eu
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="$REPO_ROOT/README.template.md"
 README="$REPO_ROOT/README.md"
+
 TMP="$REPO_ROOT/.README.md.tmp"
 MANAGED_TMP="$REPO_ROOT/.README-managed.tmp"
 FILES_TMP="$REPO_ROOT/.README-files.tmp"
+TREE_TMP="$REPO_ROOT/.README-tree.tmp"
 
 cleanup() {
-  rm -f "$TMP" "$MANAGED_TMP" "$FILES_TMP"
+  rm -f "$TMP" "$MANAGED_TMP" "$FILES_TMP" "$TREE_TMP"
 }
-trap cleanup 0
-trap 'exit 1' HUP INT TERM
+trap cleanup EXIT
 
-if [ ! -f "$TEMPLATE" ]; then
-  echo "update-readme.sh: README.template.md not found; README unchanged." >&2
+cd "$REPO_ROOT"
+
+# ---------------------------------------------------------------------------
+# Validate prerequisites
+# ---------------------------------------------------------------------------
+
+if ! command -v chezmoi >/dev/null 2>&1; then
+  printf 'Error: chezmoi is not installed or not in PATH.\n' >&2
   exit 1
 fi
 
-# Read chezmoi's managed targets. Keep only targets that currently exist.
-if ! RAW=$(chezmoi managed --path-style absolute); then
-  echo "update-readme.sh: chezmoi managed failed; README unchanged." >&2
+if ! command -v git >/dev/null 2>&1; then
+  printf 'Error: git is not installed or not in PATH.\n' >&2
   exit 1
 fi
 
-printf '%s\n' "$RAW" |
-  while IFS= read -r path; do
-    [ -f "$path" ] || continue
-    case "$path" in
-    "$HOME"/*) path="~${path#"$HOME"}" ;;
-    esac
-    printf '%s\n' "$path"
-  done |
-  sort -u |
-  sed 's/^/- `/; s/$/`/' >"$MANAGED_TMP"
-
-if [ ! -s "$MANAGED_TMP" ]; then
-  echo "update-readme.sh: managed-file list is empty; README unchanged." >&2
+if ! command -v awk >/dev/null 2>&1; then
+  printf 'Error: awk is not installed or not in PATH.\n' >&2
   exit 1
 fi
 
-# Inventory tracked and non-ignored untracked files.
-# Exclude Git internals and the generated README temporary files.
-if ! git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard |
+if [[ ! -f "$TEMPLATE" ]]; then
+  printf 'Error: README template not found: %s\n' "$TEMPLATE" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Generate the chezmoi-managed file list
+# ---------------------------------------------------------------------------
+
+chezmoi managed --path-style relative |
+  LC_ALL=C sort |
+  awk '
+        BEGIN {
+            print "| File |"
+            print "| --- |"
+        }
+        {
+            gsub(/\|/, "\\|")
+            print "| `" $0 "` |"
+        }
+    ' >"$MANAGED_TMP"
+
+# ---------------------------------------------------------------------------
+# Generate the repository file inventory
+# ---------------------------------------------------------------------------
+
+# Include tracked and non-ignored untracked files, but omit tracked files
+# that have been deleted from the working tree.
+git ls-files --cached --others --exclude-standard |
   LC_ALL=C sort -u |
   while IFS= read -r path; do
     case "$path" in
-    .git/* | .README.md.tmp | .README-managed.tmp | .README-files.tmp)
+    .git | .git/* | .README.md.tmp | .README-managed.tmp | .README-files.tmp | .README-tree.tmp)
       continue
       ;;
     esac
-    printf '%s\n' "$path"
-  done >"$FILES_TMP"; then
-  echo "update-readme.sh: failed to inventory repository; README unchanged." >&2
-  exit 1
-fi
 
-if [ ! -s "$FILES_TMP" ]; then
-  echo "update-readme.sh: repository inventory is empty; README unchanged." >&2
-  exit 1
-fi
+    if [[ -f "$path" || -L "$path" ]]; then
+      printf '%s\n' "$path"
+    fi
+  done >"$FILES_TMP"
 
-# Ensure both markers exist exactly once before generating output.
-for marker in \
-  '<!-- GENERATED:MANAGED_FILES -->' \
+# ---------------------------------------------------------------------------
+# Turn the inventory into a correctly nested directory tree
+# ---------------------------------------------------------------------------
+
+awk '
+    function add_child(parent, name, fullpath, key) {
+        key = parent SUBSEP name
+
+        if (!(key in child_seen)) {
+            child_seen[key] = 1
+            children[parent, ++child_count[parent]] = name
+        }
+
+        fullpath = (parent == "" ? name : parent "/" name)
+        return fullpath
+    }
+
+    {
+        path = $0
+        parent = ""
+        count = split(path, parts, "/")
+
+        for (i = 1; i <= count; i++) {
+            name = parts[i]
+            fullpath = add_child(parent, name)
+
+            if (i < count) {
+                is_dir[fullpath] = 1
+            }
+
+            parent = fullpath
+        }
+    }
+
+    function print_tree(parent, prefix, i, name, fullpath, connector, next_prefix, total) {
+        total = child_count[parent]
+
+        for (i = 1; i <= total; i++) {
+            name = children[parent, i]
+            fullpath = (parent == "" ? name : parent "/" name)
+
+            if (i == total) {
+                connector = "`-- "
+                next_prefix = prefix "    "
+            } else {
+                connector = "|-- "
+                next_prefix = prefix "|   "
+            }
+
+            if (is_dir[fullpath]) {
+                printf "%s%s%s/\n", prefix, connector, name
+                print_tree(fullpath, next_prefix)
+            } else {
+                printf "%s%s%s\n", prefix, connector, name
+            }
+        }
+    }
+
+    END {
+        print_tree("", "")
+    }
+' "$FILES_TMP" >"$TREE_TMP"
+
+# ---------------------------------------------------------------------------
+# Validate template markers
+# ---------------------------------------------------------------------------
+
+for marker in '<!-- GENERATED:MANAGED_FILES -->' \
   '<!-- GENERATED:REPO_FILES -->'; do
-  count=$(grep -F -x -c "$marker" "$TEMPLATE" || :)
-  if [ "$count" -ne 1 ]; then
-    echo "update-readme.sh: expected exactly one $marker in template; README unchanged." >&2
+  count="$(grep -F -o "$marker" "$TEMPLATE" | wc -l | tr -d '[:space:]')"
+
+  if [[ "$count" != "1" ]]; then
+    printf 'Error: expected exactly one occurrence of %s in README.template.md; found %s.\n' \
+      "$marker" "$count" >&2
     exit 1
   fi
 done
 
-# Replace generated markers with their corresponding dynamic sections.
-if ! awk \
-  -v managed_file="$MANAGED_TMP" \
-  -v files_file="$FILES_TMP" '
-  $0 == "<!-- GENERATED:MANAGED_FILES -->" {
-    while ((getline line < managed_file) > 0) print line
-    close(managed_file)
-    next
-  }
-  $0 == "<!-- GENERATED:REPO_FILES -->" {
-    print "```text"
-    while ((getline line < files_file) > 0) print line
-    close(files_file)
-    print "```"
-    next
-  }
-  { print }
-' "$TEMPLATE" >"$TMP"; then
-  echo "update-readme.sh: README generation failed; README unchanged." >&2
-  exit 1
-fi
+# ---------------------------------------------------------------------------
+# Render README.md
+# ---------------------------------------------------------------------------
 
-# Validate output before replacing README.
-if [ ! -s "$TMP" ] ||
-  ! grep -F -q '## Repository layout' "$TMP" ||
-  ! grep -F -q '## Restore managed files from GitHub' "$TMP" ||
-  grep -F -q '<!-- GENERATED:' "$TMP"; then
-  echo "update-readme.sh: generated README failed validation; README unchanged." >&2
-  exit 1
+awk \
+  -v managed_file="$MANAGED_TMP" \
+  -v tree_file="$TREE_TMP" '
+    $0 == "<!-- GENERATED:MANAGED_FILES -->" {
+        while ((getline line < managed_file) > 0) {
+            print line
+        }
+        close(managed_file)
+        next
+    }
+
+    $0 == "<!-- GENERATED:REPO_FILES -->" {
+        print "```text"
+        print "dotfiles/"
+
+        while ((getline line < tree_file) > 0) {
+            # Use Unicode tree connectors in the rendered README.
+            gsub(/\|-- /, "├── ", line)
+            gsub(/`-- /, "└── ", line)
+            gsub(/\|   /, "│   ", line)
+            print line
+        }
+
+        close(tree_file)
+        print "```"
+        next
+    }
+
+    {
+        print
+    }
+' "$TEMPLATE" >"$TMP"
+
+# ---------------------------------------------------------------------------
+# Replace README only if its content changed
+# ---------------------------------------------------------------------------
+
+if [[ -f "$README" ]] && cmp -s "$TMP" "$README"; then
+  printf 'README.md is already up to date.\n'
+  exit 0
 fi
 
 mv "$TMP" "$README"
-git -C "$REPO_ROOT" add README.md
+printf 'README.md regenerated successfully.\n'
 
-echo "update-readme.sh: regenerated and staged README.md"
+# Stage the generated README if this is a Git repository.
+git add -- README.md
+printf 'README.md staged for commit.\n'
