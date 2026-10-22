@@ -876,13 +876,14 @@ nikgapps() {
     return 1
   fi
 
+  
   local message="Added a custom NikGapps config"
 
   if [[ $staged -gt 1 ]]; then
     message="Added $staged custom NikGapps configs"
   fi
 
-    git commit -m "$message" && \
+  git commit -m "$message" && \
     echo "\e[32m  [SUCCESS] Committed $staged file(s)\e[0m" || return 1
 
       
