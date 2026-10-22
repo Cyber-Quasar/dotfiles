@@ -1,95 +1,177 @@
 # dotfiles
 
-Personal dotfiles managed with [chezmoi](https://chezmoi.io), synced across Termux (Android) and Linux from a single repo.
+Personal dotfiles managed with [chezmoi](https://chezmoi.io), synced across Termux (Android) and Linux from a single repository.
 
 ## What's tracked
 
-This list is generated automatically by a git pre-commit hook — see `scripts/update-readme.sh`. Don't edit the block below by hand; it will be overwritten on the next commit.
+The list below is generated from chezmoi's managed targets that currently exist on this device.
 
-<!-- MANAGED_FILES_START -->
-- `~/.gitconfig`
-- `~/.p10k.zsh`
-- `~/.zshrc`
-- `~/README.md`
-- `~/scripts/update-readme.sh`
-<!-- MANAGED_FILES_END -->
+| File |
+| --- |
+| `.gitconfig` |
+| `.p10k.zsh` |
+| `.zshrc` |
+| `README.md` |
+| `README.template.md` |
+| `scripts` |
+| `scripts/README.template.md` |
+| `scripts/update-readme.sh` |
 
 ## Platform separation
 
-One repo, no forks or branches per OS. Platform-specific behavior is handled via chezmoi templates (`.tmpl` files) using a `platform` variable, since `chezmoi.os` alone can't distinguish Termux from other Linux systems (both report `"linux"`).
+One repository, with platform-specific behavior handled through chezmoi templates and the `platform` variable.
 
-Each machine needs its own `~/.config/chezmoi/chezmoi.toml`:
+Each machine needs `~/.config/chezmoi/chezmoi.toml`.
+
+**Termux:**
 
 ```toml
 [data]
-    platform = "termux"   # or "linux"
-```
-
-Termux-only files (like `.termux/`) are skipped entirely on non-Termux machines via `.chezmoiignore`.
-
-## Repo layout
-
-Source files sit at the repo root (no `home/` subdirectory, chezmoi's default source-directory behavior.
-
-```
-dotfiles/
-├── .github/workflows/
-├── scripts/
-│   └── update-readme.sh
-├── README.md
-├── .chezmoiignore
-├── dot_zshrc.tmpl
-├── dot_gitconfig
-├── dot_p10k.zsh
-└── private_dot_termux/
-    ├── font.ttf
-    └── termux.properties
-```
-
-## Setup on a new machine
-
-**Termux:**
-```bash
-pkg install chezmoi
-mkdir -p ~/.config/chezmoi
-echo -e '[data]\n    platform = "termux"' > ~/.config/chezmoi/chezmoi.toml
-chezmoi init --apply git@github.com:<you>/dotfiles.git
+    platform = "termux"
 ```
 
 **Linux:**
-```bash
-sh -c "$(curl -fsLS get.chezmoi.io)"
-mkdir -p ~/.config/chezmoi
-echo -e '[data]\n    platform = "linux"' > ~/.config/chezmoi/chezmoi.toml
-chezmoi init --apply git@github.com:<you>/dotfiles.git
+
+```toml
+[data]
+    platform = "linux"
 ```
 
-**After cloning on any machine**, also install the pre-commit hook (it does not travel with `git clone` automatically):
-```bash
-chezmoi cd
-cp scripts/pre-commit .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+Termux-only files are skipped on non-Termux machines through `.chezmoiignore`.
+
+## Repository layout
+
+This inventory is generated from files in the repository that Git tracks or recognizes as non-ignored untracked files.
+
+```text
+dotfiles/
+├── .chezmoiignore
+├── .github/
+│   └── workflows/
+│       ├── label.yml
+│       ├── mirror-to-gitlab.yml
+│       └── summary.yml
+├── README.md
+├── README.template.md
+├── private_dot_gitconfig.tmpl
+├── private_dot_p10k.zsh.tmpl
+├── private_dot_zshrc.tmpl
+└── scripts/
+    ├── README.template.md
+    └── update-readme.sh
 ```
+
+## Restore managed files from GitHub
+
+Chezmoi stores the desired configuration in its source directory, normally `~/.local/share/chezmoi`.
+
+### Existing setup
+
+Pull the latest repository changes, review them, and apply the managed files:
+
+```bash
+chezmoi git -- pull --ff-only
+chezmoi diff
+chezmoi apply
+```
+
+If your local branch has no upstream configured, check your Git remote and branch tracking before pulling.
+
+If you only need to apply the source state already present locally:
+
+```bash
+chezmoi diff
+chezmoi apply
+```
+
+Review the diff before applying because managed target files may be changed.
+
+### New or reinstalled device
+
+Install Git and chezmoi first.
+
+On Termux:
+
+```bash
+pkg install git chezmoi
+
+mkdir -p ~/.config/chezmoi
+cat > ~/.config/chezmoi/chezmoi.toml <<'EOF'
+[data]
+    platform = "termux"
+EOF
+```
+
+On Linux, install Git and chezmoi using your preferred method, then configure:
+
+```bash
+mkdir -p ~/.config/chezmoi
+cat > ~/.config/chezmoi/chezmoi.toml <<'EOF'
+[data]
+    platform = "linux"
+EOF
+```
+
+Initialize the repository, review the changes, and apply:
+
+```bash
+chezmoi init git@github.com:Cyber-Quasar/dotfiles.git
+chezmoi diff
+chezmoi apply
+```
+
+GitHub SSH authentication must already be configured. Review the diff carefully on devices that already contain important configuration files.
 
 ## How to use
 
 ```bash
-chezmoi edit ~/.zshrc     # edit the source template
-chezmoi diff               # preview changes
-chezmoi apply               # apply to actual home dir
-chezmoi update              # pull latest from GitHub + apply
+chezmoi edit ~/.zshrc
+chezmoi diff
+chezmoi apply
+chezmoi update
 ```
 
-Commit and push from the source dir:
+To work directly in the source repository:
+
 ```bash
 chezmoi cd
-git add -A && git commit -m "<message>" && git push
+git status
+git add -A
+git commit -m "Describe the changes"
+git push
+exit
 ```
+
+## Update the README
+
+Run from anywhere inside the repository:
+
+```bash
+sh scripts/update-readme.sh
+```
+
+The script regenerates `README.md` from this template, updates both generated sections, and stages the result.
+
+To run the generator automatically before every commit, install a local pre-commit hook:
+
+```bash
+chezmoi cd
+cp scripts/update-readme.sh .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+exit
+```
+
+Git hooks are local and do not transfer when cloning the repository. Install the hook separately on each device where you want it.
 
 ## Explicitly NOT tracked
 
-`.ssh/`, `.suroot`, `.bash_history`, `.zsh_history`, and framework-managed directories (`.oh-my-zsh`, `.cache`, `.npm`, `.local`, `.android`) — secrets, history, and generated files don't belong in a synced config repo.
+`.ssh/`, `.suroot`, shell histories, and framework-managed or generated directories should be excluded when they contain secrets, transient state, or machine-specific data.
 
-## Relationship to Termux backup system
+See `.chezmoiignore` for the actual chezmoi exclusions.
 
-This repo handles portable, hand-authored config. The separate Termux backup system (termux-backup) handles device state, caches, and anything not meant to be identical across machines. The two are not meant to track the same files. 
+## Relationship to the Termux backup system
+
+This repository handles portable, hand-authored configuration. The separate `termux-backup` system handles device state, caches, and files that should not necessarily be identical across machines.
+
+The two systems serve different purposes and should not duplicate responsibility for the same files.
+
