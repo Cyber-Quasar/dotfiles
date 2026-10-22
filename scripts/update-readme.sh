@@ -44,13 +44,14 @@ if [[ ! -f "$TEMPLATE" ]]; then
   exit 1
 fi
 
-# Each generated section must have exactly one marker.
+# Each generated section must have exactly one standalone marker line.
 for marker in '<!-- GENERATED:MANAGED_FILES -->' \
   '<!-- GENERATED:REPO_FILES -->'; do
-  count="$(grep -F -o "$marker" "$TEMPLATE" | wc -l | tr -d '[:space:]')"
+  count="$(awk -v marker="$marker" \
+    '$0 == marker { count++ } END { print count + 0 }' "$TEMPLATE")"
 
   if [[ "$count" != "1" ]]; then
-    printf 'Error: expected exactly one occurrence of %s; found %s.\n' \
+    printf 'Error: expected exactly one standalone line containing %s; found %s.\n' \
       "$marker" "$count" >&2
     exit 1
   fi
