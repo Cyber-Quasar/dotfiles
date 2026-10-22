@@ -8,9 +8,9 @@ These entries are discovered from the repository's chezmoi source filenames. The
 
 | Original filename (target) | Chezmoi source entry | Type |
 | --- | --- | --- |
-| `~/.gitconfig` | `private_dot_gitconfig.tmpl` | Private Template Template |
-| `~/.p10k.zsh` | `private_dot_p10k.zsh.tmpl` | Private Template Template |
-| `~/.zshrc` | `private_dot_zshrc.tmpl` | Private Template Template |
+| `~/.gitconfig` | `private_dot_gitconfig.tmpl` | Private Template |
+| `~/.p10k.zsh` | `private_dot_p10k.zsh.tmpl` | Private Template |
+| `~/.zshrc` | `private_dot_zshrc.tmpl` | Private Template |
 
 ## Platform separation
 

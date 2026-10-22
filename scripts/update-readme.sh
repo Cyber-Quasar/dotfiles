@@ -215,10 +215,6 @@ describe_source_entry() {
     fi
   fi
 
-  if (( is_template )); then
-    labels+=("Template")
-  fi
-
   local IFS=' '
   printf '%s' "${labels[*]}"
 }
