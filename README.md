@@ -8,6 +8,7 @@ These entries are discovered from the repository's chezmoi source filenames. The
 
 | Original filename (target) | Chezmoi source entry | Type |
 | --- | --- | --- |
+| `~/.config/chrony/chrony.conf` | `private_dot_config/private_chrony/private_chrony.conf` | Private Regular file |
 | `~/.gitconfig` | `private_dot_gitconfig.tmpl` | Private Template |
 | `~/.p10k.zsh` | `private_dot_p10k.zsh.tmpl` | Private Template |
 | `~/.zshrc` | `private_dot_zshrc.tmpl` | Private Template |
@@ -49,6 +50,9 @@ dotfiles/
 │       └── update-readme.yml
 ├── README.md
 ├── README.template.md
+├── private_dot_config/
+│   └── private_chrony/
+│       └── private_chrony.conf
 ├── private_dot_gitconfig.tmpl
 ├── private_dot_p10k.zsh.tmpl
 ├── private_dot_zshrc.tmpl
