@@ -876,30 +876,32 @@ nikgapps() {
     return 1
   fi
 
-  
-  local message="Added a custom NikGapps config"
+# Create commit message
+  local message="Add custom NikGapps config"
+  local pr_title="Add custom NikGapps config"
 
   if [[ $staged -gt 1 ]]; then
-    message="Added $staged custom NikGapps configs"
+    message="Add $staged custom NikGapps configs"
+    pr_title="$message"
   fi
 
-  git commit -m "$message" && \
+  git commit -m "$message" &&
     echo "\e[32m  [SUCCESS] Committed $staged file(s)\e[0m" || return 1
 
-      
   # Force push cleanly since local history was reset to upstream
   git push --force-with-lease origin main && \
-      echo "\e[32m  [SUCCESS] Pushed cleanly to fork\e[0m" || return 1
+    echo "\e[32m  [SUCCESS] Pushed cleanly to fork\e[0m" || return 1
 
   echo "\e[36m  --> Creating pull request...\e[0m"
   gh pr create \
     --repo nikgapps/config \
-    --title "NikGapps custom configs ($staged file(s))" \
+    --title "$pr_title" \
     --body "Auto-submitted via a Z Shell function" \
     --base main \
-    --head Cyber-Quasar:main || echo "\e[33m  [INFO] PR might already exist; your changes are synced to it.\e[0m"
+    --head Cyber-Quasar:main ||
+    echo "\e[33m  [INFO] PR might already exist\e[0m"
 
-  echo "\e[32m\n✔ Done! Check SourceForge Config-Releases in ~30 minutes for your build.\e[0m"
+  echo "\e[32m\n✔ Done! Check SourceForge Config-Releases in ~30 minutes\e[0m"
   cd "$HOME"
 }
 
