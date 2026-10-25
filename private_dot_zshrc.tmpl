@@ -45,27 +45,18 @@ export DL="$HOME/storage/downloads"
 # SSH agent — loads the key once per shell session so SSH-signed commits (gpg.format=ssh) and git push/pull don't re-prompt for the passphrase on every operation. 14 commits behind upstream once meant 14 separate prompts during a rebase, and a single mistyped one corrupted it mid-run. A restore flow (termux-restore) can run before the key even exists on disk yet (fresh install, key restored partway through), so the auto-run below at shell start may silently find nothing to add. _ensure_ssh_agent is called again explicitly at the start of termux-restore once the key is actually expected to be in place. local-restore doesn't call this — it's deliberately git/SSH-free (SD-card-only, fully offline).
 # ─────────────────────────────────────────────
 _ensure_ssh_agent() {
-    # Pinned, not left to ssh-agent's own default path logic — that default
-    # once failed with "mkdir_path: open(\"/\")" (a malformed path landing
-    # on filesystem root, which Termux can never write to). A fixed socket
-    # also means every Termux session shares one agent instead of each
-    # spawning its own — without this, a key added in one session is
-    # invisible to every other open session.
-    export SSH_AUTH_SOCK="$PREFIX/var/run/ssh-agent.socket"
-    ssh-add -l &>/dev/null
-    # Named agent_status, not status — `status` is a reserved zsh parameter
-    # (alias for $?) and can't be assigned to, even with `local`; doing so
-    # throws "read-only variable: status" and aborts the rest of .zshrc.
-    local agent_status=$?
-    if [[ $agent_status -eq 2 ]]; then
-        # 2 = can't connect at all — no agent listening on this socket yet
-        rm -f "$SSH_AUTH_SOCK"
-        ssh-agent -a "$SSH_AUTH_SOCK" > /dev/null
-        ssh-add ~/.ssh/id_ed25519 2>/dev/null
-    elif [[ $agent_status -eq 1 ]]; then
-        # 1 = agent already running, just has no identities loaded yet
-        ssh-add ~/.ssh/id_ed25519 2>/dev/null
-    fi
+    # A fresh agent every session, by design — the key only lives decrypted
+    # in memory for as long as that one session exists. The socket path is
+    # still pinned (using $$, this shell's own PID, so it's unique per
+    # session) rather than left to ssh-agent's own default path logic —
+    # that default once failed with "mkdir_path: open(\"/\")" (a malformed
+    # path landing on filesystem root, which Termux can never write to).
+    # Pinning avoids the crash without reintroducing cross-session key
+    # sharing.
+    export SSH_AUTH_SOCK="$PREFIX/var/run/ssh-agent-$$.socket"
+    rm -f "$SSH_AUTH_SOCK"
+    ssh-agent -a "$SSH_AUTH_SOCK" > /dev/null
+    ssh-add ~/.ssh/id_ed25519 2>/dev/null
 }
 _ensure_ssh_agent
 
@@ -198,6 +189,46 @@ _tb_clean_tracked() {
         fi
     done
     cd "$HOME"
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: _tb_mirror_packages — diffs currently-installed packages against a given pkg-list.txt, lists anything installed but not in the backup, and (only after explicit y/N confirmation) uninstalls those extras so the install mirrors the backup instead of just layering it on top. Never removes anything silently — a pkg-list.txt older than something you've since installed (chezmoi, fzf, anything) would otherwise be able to uninstall the very tool running the restore.
+# ─────────────────────────────────────────────
+_tb_mirror_packages() {
+    local PKG_LIST_FILE="$1"
+    [[ -f "$PKG_LIST_FILE" ]] || return 0
+
+    local CURRENT_PKGS
+    CURRENT_PKGS="$(pkg list-installed 2>/dev/null | grep -v '^Listing' | cut -d/ -f1)"
+
+    local EXTRA_PKGS=()
+    local pkg
+    while IFS= read -r pkg; do
+        [[ -z "$pkg" ]] && continue
+        grep -qxF "$pkg" "$PKG_LIST_FILE" || EXTRA_PKGS+=("$pkg")
+    done <<< "$CURRENT_PKGS"
+
+    if [[ ${#EXTRA_PKGS[@]} -eq 0 ]]; then
+        echo "\e[32m  [SUCCESS] Already matches the backup — nothing extra installed\e[0m"
+        return 0
+    fi
+
+    echo "\e[33m  [INFO] ${#EXTRA_PKGS[@]} package(s) installed but not in the backup:\e[0m"
+    local p
+    for p in "${EXTRA_PKGS[@]}"; do
+        echo "\e[33m    - $p\e[0m"
+    done
+
+    printf "\e[33m  Remove these to mirror the backup exactly? Review the list above first — [y/N] \e[0m"
+    local CONFIRM
+    read -r CONFIRM
+    if [[ "$CONFIRM" == [yY] ]]; then
+        pkg uninstall -y "${EXTRA_PKGS[@]}" 2>>"$HOME/.termux-restore.log" && \
+            echo "\e[32m  [SUCCESS] Extra packages removed\e[0m" || \
+            echo "\e[31m  [FAILED] Some removals failed - see ~/.termux-restore.log\e[0m"
+    else
+        echo "\e[33m  [SKIPPED] Extra packages left installed (not a true mirror)\e[0m"
+    fi
 }
 
 # ─────────────────────────────────────────────
@@ -557,6 +588,9 @@ termux-restore() {
         xargs pkg install -y < "$TBACKUP_PKG_LIST" 2>>"$HOME/.termux-restore.log" && \
             { echo "\e[32m  [SUCCESS] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
             { echo "\e[33m  [WARN] Some packages may have failed - see ~/.termux-restore.log\e[0m"; REPORT+=("packages: PARTIAL"); }
+
+        echo "\e[36m  --> Checking for packages not in the backup...\e[0m"
+        _tb_mirror_packages "$TBACKUP_PKG_LIST"
     else
         echo "\e[33m  [SKIP] pkg-list.txt not found\e[0m"
         REPORT+=("packages: SKIP")
@@ -687,6 +721,9 @@ local-restore() {
         xargs pkg install -y < "$PKG_LIST" 2>>"$HOME/.termux-restore.log" && \
             { echo "\e[32m  [SUCCESS] Packages reinstalled\e[0m"; REPORT+=("packages: OK ($PKG_COUNT)"); } || \
             { echo "\e[33m  [WARN] Some packages may have failed - see ~/.termux-restore.log\e[0m"; REPORT+=("packages: PARTIAL"); }
+
+        echo "\e[36m  --> Checking for packages not in the backup...\e[0m"
+        _tb_mirror_packages "$PKG_LIST"
     else
         echo "\e[33m  [SKIP] No pkg-list.txt found\e[0m"
         REPORT+=("packages: SKIP")
@@ -779,10 +816,7 @@ ssh-restore-ignore() { _ssh-restore-run "--ignore-existing"; }
 
 
 # ─────────────────────────────────────────────
-# FUNCTION: update — Updates Termux packages, pip, and global npm packages.
-# ─────────────────────────────────────────────
-# ─────────────────────────────────────────────
-# FUNCTION: update — Updates Termux packages, pip, and global npm packages.
+# FUNCTION: update — Updates Termux packages and global npm packages.
 # ─────────────────────────────────────────────
 update() {
     printf '\n%s\n' '==> Updating Termux packages...'
@@ -796,6 +830,22 @@ update() {
     fi
 
     printf '\n%s\n' '==> Update process finished.'
+}
+
+# ─────────────────────────────────────────────
+# FUNCTION: adb — Runs Termux ADB as root for USB OTG device detection.
+# ─────────────────────────────────────────────
+adb() {
+  echo "\e[36m╔══════════════════════════════════════╗\e[0m"
+  echo "\e[36m║            ADB (ROOT USB)            ║\e[0m"
+  echo "\e[36m╚══════════════════════════════════════╝\e[0m"
+  echo ""
+
+  su -c '
+    export HOME=/data/data/com.termux/files/home
+    export TMPDIR=/data/data/com.termux/files/usr/tmp
+    exec /data/data/com.termux/files/usr/bin/adb "$@"
+  ' sh "$@"
 }
 
 # ─────────────────────────────────────────────
@@ -876,32 +926,30 @@ nikgapps() {
     return 1
   fi
 
-# Create commit message
-  local message="Add custom NikGapps config"
-  local pr_title="Add custom NikGapps config"
+  
+  local message="Added a custom NikGapps config"
 
   if [[ $staged -gt 1 ]]; then
-    message="Add $staged custom NikGapps configs"
-    pr_title="$message"
+    message="Added $staged custom NikGapps configs"
   fi
 
-  git commit -m "$message" &&
+  git commit -m "$message" && \
     echo "\e[32m  [SUCCESS] Committed $staged file(s)\e[0m" || return 1
 
+      
   # Force push cleanly since local history was reset to upstream
   git push --force-with-lease origin main && \
-    echo "\e[32m  [SUCCESS] Pushed cleanly to fork\e[0m" || return 1
+      echo "\e[32m  [SUCCESS] Pushed cleanly to fork\e[0m" || return 1
 
   echo "\e[36m  --> Creating pull request...\e[0m"
   gh pr create \
     --repo nikgapps/config \
-    --title "$pr_title" \
+    --title "NikGapps custom configs ($staged file(s))" \
     --body "Auto-submitted via a Z Shell function" \
     --base main \
-    --head Cyber-Quasar:main ||
-    echo "\e[33m  [INFO] PR might already exist\e[0m"
+    --head Cyber-Quasar:main || echo "\e[33m  [INFO] PR might already exist; your changes are synced to it.\e[0m"
 
-  echo "\e[32m\n✔ Done! Check SourceForge Config-Releases in ~30 minutes\e[0m"
+  echo "\e[32m\n✔ Done! Check SourceForge Config-Releases in ~30 minutes for your build.\e[0m"
   cd "$HOME"
 }
 
