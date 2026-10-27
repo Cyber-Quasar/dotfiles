@@ -341,7 +341,7 @@ termux-backup() {
         { echo "\e[31m    [FAILED] Could not export pkg list\e[0m"; FAIL=1; }
 
     # 3. GITHUB archive — slim, stays under 100MB
-    echo "\e[36m  --> Creating GitHub archive (slim)...\e[0m"
+    echo "\e[36m  --> Creating GitHub (slim) archive...\e[0m"
     tar -zcf "$TBACKUP_ARCHIVE" \
         --exclude="$(basename $TBACKUP_REPO)" \
         --exclude=".cache" \
@@ -460,8 +460,8 @@ EOF
     # Summary
     if [[ $FAIL -eq 0 ]]; then
         echo "\e[32m\n✔ Backup complete: $TIMESTAMP\e[0m"
-        echo "\e[32m  GitHub → $TBACKUP_ARCHIVE (slim)\e[0m"
-        echo "\e[32m  SD     → $TBACKUP_LOCAL_ARCHIVE (full)\e[0m"
+        echo "\e[32m  GitHub (slim) → $TBACKUP_ARCHIVE\e[0m"
+        echo "\e[32m  Local (full)  → $TBACKUP_LOCAL_ARCHIVE\e[0m"
     else
         echo "\e[31m\n✘ Backup finished with errors. Review above.\e[0m"
         return 1
